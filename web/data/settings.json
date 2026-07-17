@@ -1,0 +1,8 @@
+{
+  "run_timeout_seconds": 300,
+  "max_history_runs": 50,
+  "python_executable": "py",
+  "cors_origins": [
+    "*"
+  ]
+}

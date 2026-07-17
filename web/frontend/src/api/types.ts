@@ -1,0 +1,129 @@
+// ── Watchlist ─────────────────────────────────────────────────────────────────
+
+export interface WatchlistAdjacentConfig {
+  rows: string[]
+  count: number
+}
+
+export interface WatchlistEntry {
+  id: string
+  index: number
+  name: string
+  enabled: boolean
+  showtime_url: string
+  watch_seats: string[]
+  watch_any: string[]
+  watch_adjacent: WatchlistAdjacentConfig[]
+}
+
+// ── Run result ────────────────────────────────────────────────────────────────
+
+export interface WatchlistRunMonitoring {
+  watch_seats: string[]
+  watch_any: string[]
+  watch_adjacent: WatchlistAdjacentConfig[]
+}
+
+export interface WatchlistRunResult {
+  name: string
+  enabled: boolean
+  showtime_url: string
+  monitoring: WatchlistRunMonitoring
+  status: string
+  seats_available: number
+  adjacent_windows_available: number
+  notification_sent: boolean
+  failure_type: string | null
+  error_message: string | null
+}
+
+export interface RunSummary {
+  total_watchlists: number
+  succeeded: number
+  disabled: number
+  failed: number
+  notifications_sent: number
+  cache_hits: number
+  cache_misses: number
+}
+
+export interface FailureBreakdown {
+  challenge_pages: number
+  expired_urls: number
+  parse_errors: number
+  playwright_errors: number
+}
+
+export interface RunResult {
+  schema_version: number
+  generated_by: string
+  generated_at: string
+  run_id: string
+  started_at: string
+  completed_at: string
+  duration_seconds: number
+  tracker_version: string
+  hostname: string
+  run_status: string
+  summary: RunSummary
+  failure_breakdown: FailureBreakdown
+  watchlists: WatchlistRunResult[]
+}
+
+// ── History ───────────────────────────────────────────────────────────────────
+
+export interface RunHistorySummary {
+  run_id: string
+  completed_at: string
+  run_status: string
+  duration_seconds: number
+  tracker_version: string
+  notifications_sent: number
+  total_watchlists: number
+  succeeded: number
+  failed: number
+}
+
+export interface HistoryResponse {
+  runs: RunHistorySummary[]
+  skipped_files: string[]
+}
+
+// ── System ────────────────────────────────────────────────────────────────────
+
+export interface HealthCheckResult {
+  status: 'ok' | 'error'
+  detail: string | null
+}
+
+export interface HealthResponse {
+  status: 'healthy' | 'unhealthy'
+  checks: Record<string, HealthCheckResult>
+}
+
+export interface InfoResponse {
+  api_version: string
+  schema_version: number
+  hostname: string
+  run_in_progress: boolean
+  tracker_version: string | null
+  last_run_id: string | null
+  last_run_status: string | null
+  last_run_at: string | null
+}
+
+export interface SettingsResponse {
+  run_timeout_seconds: number
+  max_history_runs: number
+  python_executable: string
+  cors_origins: string[]
+  tracker_script: string
+  watchlist_file: string
+}
+
+// ── Run trigger ───────────────────────────────────────────────────────────────
+
+export interface RunTriggerResponse {
+  status: string
+  message: string
+}

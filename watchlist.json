@@ -1,0 +1,72 @@
+{
+  "watchlists": [
+    {
+      "name": "The Odyssey - Wed Jul 22",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822631/seats",
+      "enabled": true,
+      "watch_adjacent": [
+        {
+          "rows": [
+            "I",
+            "J",
+            "K",
+            "L",
+            "M"
+          ],
+          "count": 2
+        }
+      ],
+      "id": "24e0b334-97e5-4b88-aeab-1b859e2f1abb"
+    },
+    {
+      "name": "The Odyssey - Thu Jul 23 6:00 PM",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822635/seats",
+      "watch_adjacent": [
+        {
+          "rows": [
+            "H",
+            "I",
+            "K",
+            "J"
+          ],
+          "count": 2
+        }
+      ],
+      "enabled": true,
+      "id": "e0a08d09-2ac7-45b0-b205-46e6d1a2b080"
+    },
+    {
+      "name": "The Odyssey - Fri Jul 24 7:00 PM",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822639/seats",
+      "watch_adjacent": [
+        {
+          "rows": [
+            "I",
+            "J",
+            "K",
+            "L",
+            "M"
+          ],
+          "count": 2
+        }
+      ],
+      "enabled": true,
+      "id": "6f86f7e9-f96d-4a10-81a8-a8b2c3711d2b"
+    },
+    {
+      "name": "Scary Movie 11:45pm",
+      "showtime_url": "https://www.amctheatres.com/showtimes/144254871/seats",
+      "watch_adjacent": [
+        {
+          "rows": [
+            "D",
+            "E",
+            "F"
+          ],
+          "count": 2
+        }
+      ],
+      "id": "e657d843-f3ac-44e2-aa4c-dd795fadda26"
+    }
+  ]
+}
