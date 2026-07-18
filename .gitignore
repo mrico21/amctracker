@@ -20,6 +20,7 @@ dist/
 # Runtime
 # ======================================================
 web/data/runs/
+web/data/debug/
 web/data/settings.json
 web/logs/
 logs/

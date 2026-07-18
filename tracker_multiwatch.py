@@ -21,6 +21,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 WATCHLIST = Path(__file__).parent / "watchlist.json"
 STATE_FILE = Path(__file__).parent / "state.json"
 LOG_FILE = Path(__file__).parent / "tracker.log"
+_DEBUG_DIR = Path(__file__).parent / "web" / "data" / "debug"
 LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 RESERVABLE_TYPES = {"CanReserve", "LoveSeatLeft", "LoveSeatRight"}
 _SMALL_PAGE_THRESHOLD = 200_000  # chars; real AMC pages are ~944KB+; Cloudflare block pages are ~7KB
@@ -279,6 +280,15 @@ def scan_seating_layouts(html: str) -> list:
                     continue
             seen_starts[start] = layout
     return [v for _, v in sorted(seen_starts.items()) if v is not None]
+
+
+def _save_debug_html(html: str, prefix: str) -> str:
+    """Write html to _DEBUG_DIR with a timestamped filename; return the path written."""
+    _DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    dest = _DEBUG_DIR / f"{prefix}_{stamp}.html"
+    dest.write_text(html, encoding="utf-8")
+    return str(dest)
 
 
 def classify_page_failure(html: str, exc: Exception) -> str:
@@ -1283,6 +1293,7 @@ def main():
     run_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)
     wl_results = []
+    _debug_html_saved = False
 
     for wl in watchlists:
         wl_name = wl["name"]
@@ -1513,6 +1524,14 @@ def main():
             if failure_type == "CHALLENGE_PAGE":
                 msg = f"page received ({len(html):,} chars) is too small for a valid seat map -- Cloudflare or rate-limit block"
                 logging.warning("[%s] %s: %s", wl_name, failure_type, msg)
+                if not _debug_html_saved and html:
+                    try:
+                        saved_path = _save_debug_html(html, "challenge")
+                        logging.warning("[%s] debug HTML saved to %s", wl_name, saved_path)
+                        print(f"[debug] challenge page HTML saved to {saved_path}")
+                        _debug_html_saved = True
+                    except Exception as _save_exc:
+                        logging.warning("[%s] could not save debug HTML: %s", wl_name, _save_exc)
                 failed_challenge += 1
             elif failure_type == "EXPIRED_URL":
                 msg = f"full page received ({len(html):,} chars) but seatingLayout is absent -- showtime may be expired or URL is invalid"
