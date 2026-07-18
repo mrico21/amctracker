@@ -140,17 +140,17 @@ def main():
     )
     logging.info("--- run started ---")
 
-    url, watch_seats = load_watchlist()
-
     if args.test_notification:
         user_key = os.environ.get("PUSHOVER_USER_KEY")
         api_token = os.environ.get("PUSHOVER_API_TOKEN")
         if not user_key or not api_token:
             print("ERROR: PUSHOVER_USER_KEY and PUSHOVER_API_TOKEN must be set")
             sys.exit(1)
-        send_notification(url, "TEST", "UNAVAILABLE", "AVAILABLE")
+        send_notification("https://www.amctheatres.com", "TEST", "UNAVAILABLE", "AVAILABLE")
         print("Test notification sent.")
         return
+
+    url, watch_seats = load_watchlist()
 
     print(f"Showtime : {url}")
     print(f"Watching : {', '.join(watch_seats)}")
