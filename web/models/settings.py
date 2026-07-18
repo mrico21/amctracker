@@ -11,8 +11,13 @@ class BackendSettings(BaseModel):
 
     @model_validator(mode="after")
     def fill_python_default(self) -> "BackendSettings":
-        if not self.python_executable:
-            self.python_executable = "py" if sys.platform == "win32" else "python3"
+        is_windows = sys.platform == "win32"
+        # Treat empty or Windows-only "py" launcher as "needs platform default"
+        needs_default = not self.python_executable or (
+            not is_windows and self.python_executable == "py"
+        )
+        if needs_default:
+            self.python_executable = "py" if is_windows else sys.executable
         return self
 
 

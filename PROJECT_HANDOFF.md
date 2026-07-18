@@ -44,6 +44,21 @@ All planned read-only frontend pages are complete. No placeholders remain. An ap
 - Fixed `WatchlistRunMonitoring` missing `Field(default_factory=list)` defaults
 - Removed unused required field `TrackerRunRequest.request_id`
 
+### Backend — Milestone 4.1 Linux/Pi Deployment Fix (complete)
+
+**File changed:** `web/models/settings.py` — `BackendSettings.fill_python_default()`
+
+**Problem:** `settings.json` was written with `"python_executable": "py"` on Windows, then deployed to Raspberry Pi. Because `"py"` is not an empty string, the model validator left it unchanged, causing `POST /api/v1/run` to fail (no `py` launcher on Linux).
+
+**Fix:** The validator now also treats `"py"` as "needs platform default" on non-Windows. The Linux default was also changed from `"python3"` to `sys.executable`, which resolves to the active virtual environment Python. No changes to `TrackerRunner` or `ProjectPaths`. No manual edits to `settings.json` are required after cloning.
+
+**Logic:**
+- Windows: empty or `"py"` → `"py"` launcher (unchanged)
+- Linux/macOS with empty or `"py"` stored → `sys.executable` (venv Python)
+- Linux/macOS with an explicit path already set → kept as-is
+
+---
+
 ### Backend — Milestone 3 History API (complete)
 - `GET /api/v1/history` → `HistoryResponse { runs: RunHistorySummary[], skipped_files: str[] }`
 - `GET /api/v1/history/{run_id}` → full `RunResult`
