@@ -344,12 +344,20 @@ def send_any_notification(showtime_url: str, wl_name: str, newly_available: list
 
 
 def send_adjacent_notification(showtime_url: str, wl_name: str, windows: list[str], count: int) -> bool:
+    logging.info("[DEBUG] send_adjacent_notification entered  wl=%s  windows=%s", wl_name, windows)
+    print(f"[DEBUG] send_adjacent_notification entered  wl={wl_name}  windows={windows}")
     user_key = os.environ.get("PUSHOVER_USER_KEY")
     api_token = os.environ.get("PUSHOVER_API_TOKEN")
+    logging.info("[DEBUG] credentials  user_key_set=%s  api_token_set=%s", bool(user_key), bool(api_token))
+    print(f"[DEBUG] credentials  user_key_set={bool(user_key)}  api_token_set={bool(api_token)}")
     if not user_key or not api_token:
+        logging.info("[DEBUG] send_adjacent_notification returning False (missing credentials)")
+        print("[DEBUG] send_adjacent_notification returning False (missing credentials)")
         return False
     try:
-        requests.post(
+        logging.info("[DEBUG] attempting Pushover HTTP request")
+        print("[DEBUG] attempting Pushover HTTP request")
+        resp = requests.post(
             "https://api.pushover.net/1/messages.json",
             data={
                 "token": api_token,
@@ -359,9 +367,14 @@ def send_adjacent_notification(showtime_url: str, wl_name: str, windows: list[st
             },
             timeout=10,
         )
+        logging.info("[DEBUG] Pushover HTTP response  status=%d  body=%s", resp.status_code, resp.text[:200])
+        print(f"[DEBUG] Pushover HTTP response  status={resp.status_code}  body={resp.text[:200]}")
         logging.info("adjacent-notification sent  %s  count=%d  %s", wl_name, count, ", ".join(windows))
-    except requests.RequestException:
-        pass
+    except requests.RequestException as e:
+        logging.info("[DEBUG] Pushover request raised RequestException: %s", e)
+        print(f"[DEBUG] Pushover request raised RequestException: {e}")
+    logging.info("[DEBUG] send_adjacent_notification returning True")
+    print("[DEBUG] send_adjacent_notification returning True")
     return True
 
 
@@ -1465,9 +1478,16 @@ def main():
                 if config_newly_available:
                     print(f"NEWLY AVAILABLE (adjacent): {', '.join(config_newly_available)}")
                     logging.info("ADJACENT-AVAILABLE  [%s]  count=%d  %s", wl_name, count, ", ".join(config_newly_available))
-                    if send_adjacent_notification(url, wl_name, config_newly_available, count):
+                    logging.info("[DEBUG] calling send_adjacent_notification  notifications_sent_before=%d", notifications_sent)
+                    print(f"[DEBUG] calling send_adjacent_notification  notifications_sent_before={notifications_sent}")
+                    _notif_result = send_adjacent_notification(url, wl_name, config_newly_available, count)
+                    logging.info("[DEBUG] send_adjacent_notification returned %s", _notif_result)
+                    print(f"[DEBUG] send_adjacent_notification returned {_notif_result}")
+                    if _notif_result:
                         notifications_sent += 1
                         wl_notif_sent = True
+                        logging.info("[DEBUG] notifications_sent incremented to %d", notifications_sent)
+                        print(f"[DEBUG] notifications_sent incremented to {notifications_sent}")
 
             _seats_avail = sum(
                 1 for k, v in current.items()
