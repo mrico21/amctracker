@@ -26,6 +26,15 @@ RESERVABLE_TYPES = {"CanReserve", "LoveSeatLeft", "LoveSeatRight"}
 _SMALL_PAGE_THRESHOLD = 200_000  # chars; real AMC pages are ~944KB+; Cloudflare block pages are ~7KB
 TRACKER_VERSION = "1.0.5"
 
+_RUN_START: float = 0.0
+
+
+def _ts(msg: str) -> None:
+    elapsed = time.monotonic() - _RUN_START if _RUN_START else 0.0
+    line = f"[TIMING +{elapsed:7.2f}s] {msg}"
+    print(line, flush=True)
+    logging.info(line)
+
 
 @dataclass
 class WatchlistResult:
@@ -157,16 +166,27 @@ def load_watchlists():
 
 
 def fetch_html(url: str) -> str:
+    _ts("fetch_html: entering sync_playwright context")
     with sync_playwright() as p:
+        _ts("fetch_html: launching Chromium browser")
         browser = p.chromium.launch(headless=True)
+        _ts("fetch_html: browser launched — opening new page")
         page = browser.new_page()
+        _ts(f"fetch_html: calling page.goto() (timeout=120s)")
         page.goto(url, timeout=120_000)
+        _ts("fetch_html: page.goto() returned — waiting for networkidle")
         try:
             page.wait_for_load_state("networkidle", timeout=15_000)
+            _ts("fetch_html: networkidle reached")
         except PlaywrightTimeoutError:
+            _ts("fetch_html: networkidle timed out — falling back to 12s fixed wait")
             page.wait_for_timeout(12_000)
+            _ts("fetch_html: 12s fixed wait complete")
+        _ts("fetch_html: calling page.content()")
         html = page.content()
+        _ts(f"fetch_html: page.content() returned {len(html):,} chars — closing browser")
         browser.close()
+    _ts("fetch_html: sync_playwright context exited")
     return html
 
 
@@ -1155,6 +1175,9 @@ def main():
     parser.add_argument("--json-output", metavar="PATH", help="Write a JSON run summary to PATH after each tracking run")
     args = parser.parse_args()
 
+    global _RUN_START
+    _RUN_START = time.monotonic()
+
     rotate_log()
 
     logging.basicConfig(
@@ -1164,6 +1187,7 @@ def main():
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     logging.info("--- run started ---")
+    _ts("STARTUP: tracker_multiwatch.py started")
 
     if args.health:
         show_health()
@@ -1239,7 +1263,9 @@ def main():
         print("Test notification sent.")
         return
 
+    _ts("STARTUP: loading watchlist.json")
     watchlists = load_watchlists()
+    _ts(f"STARTUP: watchlist loaded — {len(watchlists)} entries")
 
     state = load_state()
     html_cache = {}
@@ -1282,6 +1308,7 @@ def main():
             continue
 
         html = ""
+        wl_start = time.monotonic()
         try:
             url = wl["showtime_url"].strip()
             watch_seats = wl.get("watch_seats", [])
@@ -1289,6 +1316,7 @@ def main():
             watch_adjacent_configs = wl.get("watch_adjacent", [])
             wl_notif_sent = False
 
+            _ts(f"WATCHLIST BEGIN: {wl_name}")
             print(f"\n=== {wl_name} ===")
             print(f"Showtime : {url}")
             if watch_seats:
@@ -1303,26 +1331,32 @@ def main():
             if url in html_cache:
                 logging.info("[%s] CACHE HIT  %s", wl_name, url)
                 print("(cache hit -- reusing fetched HTML)")
+                _ts(f"FETCH: cache hit for {url}")
                 html = html_cache[url]
                 cache_hits += 1
             else:
                 logging.info("[%s] CACHE MISS  %s", wl_name, url)
+                _ts(f"FETCH BEGIN: {url}")
                 html = fetch_html(url)
                 html_cache[url] = html
                 cache_misses += 1
+                _ts(f"FETCH DONE: {len(html):,} chars received")
 
             if args.debug:
                 debug_file = f"amc_seats_{_slug(wl_name)}.html"
                 Path(debug_file).write_text(html, encoding="utf-8")
                 print(f"[debug] HTML saved to {debug_file} ({len(html):,} chars)")
 
+            _ts("PARSE BEGIN: extracting seating layout")
             layout = extract_seating_layout(html)
             all_seats = collect_seats(layout)
             seat_map = {s["name"]: s for s in all_seats if s.get("name")}
+            _ts(f"PARSE DONE: {len(all_seats)} seats found ({len(seat_map)} named)")
 
             previous = state.get(wl_name, {})
             current = {}
 
+            _ts("NOTIFY BEGIN: evaluating seat changes and sending notifications")
             if watch_seats:
                 print(f"\n{'Seat':<6}  {'Status':<12}  {'Type':<12}  Tier")
                 print("-" * 44)
@@ -1446,6 +1480,7 @@ def main():
                         notifications_sent += 1
                         wl_notif_sent = True
 
+            _ts("NOTIFY DONE")
             _seats_avail = sum(
                 1 for k, v in current.items()
                 if not k.startswith("adj:") and v == "AVAILABLE"
@@ -1454,6 +1489,7 @@ def main():
                 1 for k, v in current.items()
                 if k.startswith("adj:") and v == "AVAILABLE"
             )
+            _ts(f"WATCHLIST DONE: {wl_name} — elapsed {time.monotonic() - wl_start:.2f}s")
             wl_results.append(WatchlistResult(
                 name=wl_name,
                 enabled=True,
@@ -1472,6 +1508,7 @@ def main():
             processed += 1
 
         except Exception as exc:
+            _ts(f"WATCHLIST ERROR: {wl_name} — elapsed {time.monotonic() - wl_start:.2f}s")
             failure_type = classify_page_failure(html, exc)
             if failure_type == "CHALLENGE_PAGE":
                 msg = f"page received ({len(html):,} chars) is too small for a valid seat map -- Cloudflare or rate-limit block"
@@ -1506,10 +1543,13 @@ def main():
                 error_message=msg,
             ))
 
+    _ts("SAVE STATE: writing state.json")
     save_state(state)
+    _ts("SAVE STATE: done")
     completed_at = datetime.now(timezone.utc)
 
     duration = time.monotonic() - start_time
+    _ts(f"COMPLETE: total runtime {duration:.2f}s")
     unique_urls = len(html_cache)
     summary_lines = [
         "## Run Summary",
