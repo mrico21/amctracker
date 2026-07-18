@@ -10,3 +10,4 @@ class TrackerRunRequest:
     runs_dir: Path
     latest_run_file: Path
     timeout_seconds: int
+    randomize_order: bool = False

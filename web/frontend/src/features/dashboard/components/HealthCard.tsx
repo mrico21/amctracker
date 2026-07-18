@@ -28,7 +28,7 @@ export function HealthCard({ health, hostname, trackerVersion }: HealthCardProps
           <ul className="space-y-1.5">
             {Object.entries(health.checks).map(([name, result]) => (
               <li key={name} className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{name.replace(/_/g, ' ')}</span>
+                <span className="capitalize text-muted-foreground">{name.replace(/_/g, ' ')}</span>
                 <HealthIndicator
                   status={result.status === 'ok' ? 'healthy' : 'unhealthy'}
                   label={result.status === 'ok' ? 'ok' : (result.detail ?? 'error')}

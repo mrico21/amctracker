@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 
-from web.api.dependencies import get_settings_service
+from web.api.dependencies import get_scheduler_service, get_settings_service
 from web.models.settings import SettingsResponse, SettingsUpdate
+from web.services.scheduler_service import SchedulerService
 from web.services.settings_service import SettingsService
 
 router = APIRouter(tags=["configuration"])
@@ -18,6 +19,9 @@ async def get_settings_config(
 async def put_settings_config(
     body: SettingsUpdate,
     service: SettingsService = Depends(get_settings_service),
+    scheduler: SchedulerService = Depends(get_scheduler_service),
 ) -> SettingsResponse:
     service.update(body)
+    new_settings = service.load()
+    scheduler.reload(new_settings)
     return service.get_response()

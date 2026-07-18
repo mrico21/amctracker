@@ -12,3 +12,4 @@ class JobStatus(BaseModel):
     completed_watchlists: int = 0
     total_watchlists: int = 0
     error_message: str | None = None
+    trigger_type: Literal["manual", "automatic", "retry", "startup"] = "manual"

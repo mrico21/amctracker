@@ -5,15 +5,19 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { ErrorState } from '@/components/common/ErrorState'
 import { PageContainer } from '@/components/common/PageContainer'
 import { Button } from '@/components/ui/button'
+import { useEvents } from '@/hooks/useEvents'
 import { useHealth } from '@/hooks/useHealth'
 import { useInfo } from '@/hooks/useInfo'
 import { useJobStatus } from '@/hooks/useJobStatus'
 import { useLatestRun } from '@/hooks/useLatestRun'
+import { useSchedulerStatus } from '@/hooks/useSchedulerStatus'
 import { useTriggerRun } from '@/hooks/useTriggerRun'
+import { ActivityFeed } from './components/ActivityFeed'
 import { DashboardStats } from './components/DashboardStats'
 import { HealthCard } from './components/HealthCard'
 import { LatestRunCard } from './components/LatestRunCard'
 import { RunProgressBanner } from './components/RunProgressBanner'
+import { SchedulerCard } from './components/SchedulerCard'
 import { useRunCompletion } from './hooks/useRunCompletion'
 
 export default function Dashboard() {
@@ -23,23 +27,24 @@ export default function Dashboard() {
   const healthQuery = useHealth()
   const latestRunQuery = useLatestRun()
   const triggerRun = useTriggerRun()
+  const schedulerQuery = useSchedulerStatus()
 
   const info = infoQuery.data
   const infoRunning = info?.run_in_progress ?? false
 
-  // Poll job status whenever a run is active (info says running, or trigger was just fired)
   const jobStatusActive = infoRunning || triggerRun.isPending || triggerRun.isSuccess
   const jobStatusQuery = useJobStatus(jobStatusActive)
   const jobStatus = jobStatusQuery.data
 
-  // Treat as running if info reports it OR the job status says so (covers the 202→first-poll gap)
   const activeJobStatus = jobStatus?.status
   const isRunning =
     infoRunning ||
     activeJobStatus === 'starting' ||
     activeJobStatus === 'running'
 
-  // Invalidate caches when a run transitions from in-progress → done
+  const eventsQuery = useEvents(isRunning)
+  const events = eventsQuery.data?.events ?? []
+
   useRunCompletion(infoRunning)
 
   if (infoQuery.isError) {
@@ -71,7 +76,7 @@ export default function Dashboard() {
         }
       />
 
-      {isRunning && <RunProgressBanner jobStatus={jobStatus} />}
+      {isRunning && <RunProgressBanner jobStatus={jobStatus} events={events} />}
 
       {triggerRun.isError && (
         <div className="flex items-start gap-2.5 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3">
@@ -81,6 +86,11 @@ export default function Dashboard() {
       )}
 
       <DashboardStats info={info} latestRun={latestRunQuery.data} />
+
+      <SchedulerCard
+        scheduler={schedulerQuery.data}
+        isLoading={schedulerQuery.isLoading}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <LatestRunCard
@@ -93,6 +103,8 @@ export default function Dashboard() {
           trackerVersion={info?.tracker_version}
         />
       </div>
+
+      <ActivityFeed events={events} isLoading={eventsQuery.isLoading} />
 
       <ConfirmDialog
         open={confirmOpen}

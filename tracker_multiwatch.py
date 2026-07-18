@@ -597,6 +597,9 @@ def _process_watchlist_body(
                 if send_notification(url, seat_name, old, new, wl_name):
                     notifications += 1
                     wl_notif_sent = True
+                    _emit_event("notification_sent", watchlist=wl_name,
+                                notification_type="watch_seats", seats=[seat_name],
+                                change=f"{old} -> {new}")
 
     if watch_any_seats:
         newly_available = []
@@ -630,6 +633,8 @@ def _process_watchlist_body(
             if send_any_notification(url, wl_name, newly_available):
                 notifications += 1
                 wl_notif_sent = True
+                _emit_event("notification_sent", watchlist=wl_name,
+                            notification_type="watch_any", seats=newly_available)
 
     for adj_config in watch_adjacent_configs:
         rows = adj_config.get("rows", [])
@@ -686,10 +691,19 @@ def _process_watchlist_body(
             if send_adjacent_notification(url, wl_name, config_newly_available, count):
                 notifications += 1
                 wl_notif_sent = True
+                _emit_event("notification_sent", watchlist=wl_name,
+                            notification_type="watch_adjacent", seats=config_newly_available,
+                            window_size=count)
 
     _ts("NOTIFY DONE")
     seats_avail = sum(1 for k, v in current.items() if not k.startswith("adj:") and v == "AVAILABLE")
     adj_avail = sum(1 for k, v in current.items() if k.startswith("adj:") and v == "AVAILABLE")
+
+    available_seats = [k for k, v in current.items() if not k.startswith("adj:") and v == "AVAILABLE"]
+    available_windows = [k[4:] for k, v in current.items() if k.startswith("adj:") and v == "AVAILABLE"]
+    _emit_event("watchlist_complete", watchlist=wl_name, seats_available=seats_avail,
+                adj_available=adj_avail, available_seats=available_seats,
+                available_windows=available_windows)
 
     result = WatchlistResult(
         name=wl_name,
@@ -1609,6 +1623,7 @@ def main():
     parser.add_argument("--simulate-available", metavar="SEAT", action="append", default=[], help="Override seat to AVAILABLE (testing only)")
     parser.add_argument("--test-notification", action="store_true", help="Send a test Pushover message and exit")
     parser.add_argument("--json-output", metavar="PATH", help="Write a JSON run summary to PATH after each tracking run")
+    parser.add_argument("--randomize-order", action="store_true", help="Shuffle watchlist processing order for this run")
     args = parser.parse_args()
 
     global _RUN_START
@@ -1702,6 +1717,9 @@ def main():
     _ts("STARTUP: loading watchlist.json")
     watchlists = load_watchlists()
     _ts(f"STARTUP: watchlist loaded — {len(watchlists)} entries")
+    if args.randomize_order:
+        random.shuffle(watchlists)
+        _ts("STARTUP: watchlist order randomized")
 
     state = load_state()
     html_cache: dict = {}
@@ -1717,7 +1735,7 @@ def main():
     total_enabled = sum(1 for wl in watchlists if wl.get("enabled", True))
     enabled_idx = 0
 
-    _emit_event("run_start", total_watchlists=total_enabled)
+    _emit_event("run_start", run_id=run_id, total_watchlists=total_enabled)
 
     with PlaywrightSession(storage_state_path=_STORAGE_STATE_FILE) as session:
         browser_launch_s = session.browser_launch_seconds
@@ -1806,18 +1824,22 @@ def main():
                             logging.warning("[%s] could not save debug HTML: %s", wl_name, _save_exc)
                     failed_challenge += 1
                     cf_blocked_wls.append(wl_name)
+                    _emit_event("watchlist_blocked", watchlist=wl_name, url=url, page_size=len(html))
                 elif failure_type == "EXPIRED_URL":
                     msg = f"full page received ({len(html):,} chars) but seatingLayout is absent -- showtime may be expired or URL is invalid"
                     logging.warning("[%s] %s: %s", wl_name, failure_type, msg)
                     failed_expired += 1
+                    _emit_event("watchlist_failed", watchlist=wl_name, failure_type=failure_type, message=msg)
                 elif failure_type == "PARSE_ERROR":
                     msg = f"seatingLayout found but could not be parsed -- possible AMC page structure change; {exc}"
                     logging.exception("[%s] %s: %s", wl_name, failure_type, msg)
                     failed_parse += 1
+                    _emit_event("watchlist_failed", watchlist=wl_name, failure_type=failure_type, message=msg)
                 else:
                     msg = str(exc)
                     logging.exception("[%s] %s: %s", wl_name, failure_type, msg)
                     failed_playwright += 1
+                    _emit_event("watchlist_failed", watchlist=wl_name, failure_type=failure_type, message=msg)
                 print(f"\n[{failure_type}] {wl_name}: {msg}")
                 failed += 1
                 wl_results.append(WatchlistResult(
@@ -1833,7 +1855,7 @@ def main():
 
         session.save_storage_state()
 
-    _emit_event("run_end", succeeded=processed, failed=failed, notifications=notifications_sent)
+    _emit_event("run_complete", run_id=run_id, succeeded=processed, failed=failed, notifications=notifications_sent)
 
     _ts("SAVE STATE: writing state.json")
     save_state(state)

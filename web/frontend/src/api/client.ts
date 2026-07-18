@@ -1,10 +1,12 @@
 import type {
+  EventsResponse,
   HealthResponse,
   HistoryResponse,
   InfoResponse,
   JobStatus,
   RunResult,
   RunTriggerResponse,
+  SchedulerStatus,
   SettingsResponse,
   WatchlistEntry,
 } from './types'
@@ -42,10 +44,19 @@ function post<T>(path: string, body?: unknown): Promise<T> {
   })
 }
 
+function put<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 export const apiClient = {
   health: () => get<HealthResponse>('/health'),
   info: () => get<InfoResponse>('/info'),
   settings: () => get<SettingsResponse>('/settings'),
+  updateSettings: (body: Partial<SettingsResponse>) => put<SettingsResponse>('/settings', body),
   watchlists: () => get<WatchlistEntry[]>('/watchlists'),
   history: () => get<HistoryResponse>('/history'),
   historyRun: (runId: string) => get<RunResult>(`/history/${runId}`),
@@ -53,4 +64,6 @@ export const apiClient = {
   triggerRun: () => post<RunTriggerResponse>('/run'),
   runStatus: () => get<JobStatus>('/run/status'),
   cancelRun: () => post<{ status: string }>('/run/cancel'),
+  schedulerStatus: () => get<SchedulerStatus>('/scheduler/status'),
+  events: () => get<EventsResponse>('/events'),
 }

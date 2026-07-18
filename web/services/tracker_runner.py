@@ -3,6 +3,7 @@ import json
 import logging
 import shutil
 import threading
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,20 +19,24 @@ from web.config.exceptions import (
     TrackerTimeoutError,
 )
 from web.config.paths import ProjectPaths
+from web.models.activity import ActivityEvent
 from web.models.job_status import JobStatus
 from web.models.run_result import RunResult
 from web.models.settings import BackendSettings
 from web.models.tracker_run import TrackerRunRequest
+from web.services.activity_service import ActivityService
 
 logger = logging.getLogger("amctracker.api")
 
 
 class TrackerRunner:
-    def __init__(self, paths: ProjectPaths):
+    def __init__(self, paths: ProjectPaths, activity: ActivityService):
         self._paths = paths
+        self._activity = activity
         self._lock = threading.Lock()
         self._proc: asyncio.subprocess.Process | None = None
         self._job: JobStatus = self._load_persisted_status()
+        self._current_run_id: str | None = None
 
     # ── Startup reconciliation ────────────────────────────────────────────────
 
@@ -70,7 +75,11 @@ class TrackerRunner:
 
     # ── Launch / cancel ───────────────────────────────────────────────────────
 
-    async def launch_background(self, settings: BackendSettings) -> None:
+    async def launch_background(
+        self,
+        settings: BackendSettings,
+        trigger_type: str = "manual",
+    ) -> None:
         if not self._lock.acquire(blocking=False):
             raise RunAlreadyInProgressError()
 
@@ -83,6 +92,7 @@ class TrackerRunner:
             completed_watchlists=0,
             total_watchlists=0,
             error_message=None,
+            trigger_type=trigger_type,
         )
 
         request = TrackerRunRequest(
@@ -92,6 +102,7 @@ class TrackerRunner:
             runs_dir=self._paths.runs_dir,
             latest_run_file=self._paths.latest_run_file,
             timeout_seconds=settings.run_timeout_seconds,
+            randomize_order=settings.scheduler_randomize_order,
         )
 
         asyncio.create_task(self._run_background(request))
@@ -99,6 +110,7 @@ class TrackerRunner:
     def cancel(self) -> bool:
         if self._job.status not in ("starting", "running"):
             return False
+        run_id = self._current_run_id
         self._set_job(status="cancelled", error_message="Run was cancelled by user")
         proc = self._proc
         if proc is not None:
@@ -106,6 +118,12 @@ class TrackerRunner:
                 proc.kill()
             except Exception:
                 pass
+        self._activity.make_and_append(
+            event_type="run_cancelled",
+            message="Run cancelled by user",
+            payload={},
+            run_id=run_id,
+        )
         return True
 
     # ── Background task ───────────────────────────────────────────────────────
@@ -126,6 +144,8 @@ class TrackerRunner:
                 "--json-output",
                 str(pending_path),
             ]
+            if request.randomize_order:
+                cmd.append("--randomize-order")
 
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -263,8 +283,19 @@ class TrackerRunner:
             return
 
         evt_type = payload.get("type")
+        run_id = payload.get("run_id") or self._current_run_id
+
         if evt_type == "run_start":
+            self._current_run_id = payload.get("run_id")
             self._set_job(total_watchlists=payload.get("total_watchlists", 0))
+            n = payload.get("total_watchlists", 0)
+            self._activity.make_and_append(
+                event_type="run_start",
+                message=f"Run started - checking {n} watchlist{'s' if n != 1 else ''}",
+                payload=payload,
+                run_id=run_id,
+            )
+
         elif evt_type == "watchlist_start":
             idx = payload.get("index", 0)
             total = payload.get("total", 0)
@@ -274,13 +305,79 @@ class TrackerRunner:
                 total_watchlists=total,
                 current_watchlist=name,
             )
-        elif evt_type == "run_end":
+            self._activity.make_and_append(
+                event_type="watchlist_start",
+                message=f"Checking {name} ({idx}/{total})",
+                payload=payload,
+                run_id=run_id,
+            )
+
+        elif evt_type == "watchlist_complete":
+            name = payload.get("watchlist", "")
+            available_seats: list[str] = payload.get("available_seats", [])
+            available_windows: list[str] = payload.get("available_windows", [])
+            parts: list[str] = []
+            if available_seats:
+                parts.append(", ".join(available_seats))
+            if available_windows:
+                parts.append("adj: " + ", ".join(available_windows))
+            detail = " - " + "; ".join(parts) if parts else " - no seats available"
+            self._activity.make_and_append(
+                event_type="watchlist_complete",
+                message=f"{name}{detail}",
+                payload=payload,
+                run_id=run_id,
+            )
+
+        elif evt_type == "watchlist_blocked":
+            name = payload.get("watchlist", "")
+            self._activity.make_and_append(
+                event_type="watchlist_blocked",
+                message=f"Cloudflare block - {name}",
+                payload=payload,
+                run_id=run_id,
+            )
+
+        elif evt_type == "watchlist_failed":
+            name = payload.get("watchlist", "")
+            ft = payload.get("failure_type", "error").lower().replace("_", " ")
+            self._activity.make_and_append(
+                event_type="watchlist_failed",
+                message=f"Failed ({ft}) - {name}",
+                payload=payload,
+                run_id=run_id,
+            )
+
+        elif evt_type == "notification_sent":
+            name = payload.get("watchlist", "")
+            seats: list[str] = payload.get("seats", [])
+            seat_str = ", ".join(seats) if seats else "unknown"
+            self._activity.make_and_append(
+                event_type="notification_sent",
+                message=f"Notification sent - {name}: {seat_str}",
+                payload=payload,
+                run_id=run_id,
+            )
+
+        elif evt_type == "run_complete":
             succeeded = payload.get("succeeded", 0)
             failed = payload.get("failed", 0)
+            notifications = payload.get("notifications", 0)
+            notif_str = (
+                f", {notifications} notification{'s' if notifications != 1 else ''}"
+                if notifications else ""
+            )
             self._set_job(
                 current_watchlist=None,
                 completed_watchlists=succeeded + failed,
             )
+            self._activity.make_and_append(
+                event_type="run_complete",
+                message=f"Run complete - {succeeded} succeeded, {failed} failed{notif_str}",
+                payload=payload,
+                run_id=run_id,
+            )
+            self._current_run_id = None
 
     # ── Internal state helpers ────────────────────────────────────────────────
 

@@ -119,6 +119,60 @@ export interface SettingsResponse {
   cors_origins: string[]
   tracker_script: string
   watchlist_file: string
+  scheduler_enabled: boolean
+  scheduler_min_interval_seconds: number
+  scheduler_max_interval_seconds: number
+  scheduler_quiet_hours_enabled: boolean
+  scheduler_quiet_hours_start: string
+  scheduler_quiet_hours_end: string
+  scheduler_randomize_order: boolean
+}
+
+// ── Activity feed ─────────────────────────────────────────────────────────────
+
+export type ActivityEventType =
+  | 'run_start'
+  | 'watchlist_start'
+  | 'watchlist_complete'
+  | 'watchlist_blocked'
+  | 'watchlist_failed'
+  | 'notification_sent'
+  | 'run_complete'
+  | 'run_cancelled'
+  | 'scheduler_triggered'
+  | 'scheduler_skipped'
+
+export interface ActivityEvent {
+  id: string
+  timestamp: string
+  event_type: ActivityEventType
+  message: string
+  payload: Record<string, unknown>
+  run_id: string | null
+}
+
+export interface EventsResponse {
+  events: ActivityEvent[]
+  total: number
+}
+
+// ── Scheduler ─────────────────────────────────────────────────────────────────
+
+export type SchedulerStatusValue = 'disabled' | 'scheduled' | 'quiet'
+
+export interface SchedulerStatus {
+  enabled: boolean
+  status: SchedulerStatusValue
+  last_triggered_at: string | null
+  last_trigger_type: string | null
+  next_run_at: string | null
+  countdown_seconds: number | null
+  min_interval_seconds: number
+  max_interval_seconds: number
+  quiet_hours_enabled: boolean
+  quiet_hours_start: string
+  quiet_hours_end: string
+  randomize_order: boolean
 }
 
 // ── Run trigger ───────────────────────────────────────────────────────────────
@@ -141,4 +195,5 @@ export interface JobStatus {
   completed_watchlists: number
   total_watchlists: number
   error_message: string | null
+  trigger_type: 'manual' | 'automatic' | 'retry' | 'startup'
 }

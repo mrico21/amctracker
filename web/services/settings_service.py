@@ -24,7 +24,6 @@ class SettingsService:
         self._write(data)
 
     def update(self, update: SettingsUpdate) -> None:
-        current = self.load()
         merged = BackendSettings(
             run_timeout_seconds=update.run_timeout_seconds,
             max_history_runs=update.max_history_runs,
@@ -32,9 +31,14 @@ class SettingsService:
             cors_origins=update.cors_origins,
             pushover_user_key=update.pushover_user_key,
             pushover_api_token=update.pushover_api_token,
+            scheduler_enabled=update.scheduler_enabled,
+            scheduler_min_interval_seconds=update.scheduler_min_interval_seconds,
+            scheduler_max_interval_seconds=update.scheduler_max_interval_seconds,
+            scheduler_quiet_hours_enabled=update.scheduler_quiet_hours_enabled,
+            scheduler_quiet_hours_start=update.scheduler_quiet_hours_start,
+            scheduler_quiet_hours_end=update.scheduler_quiet_hours_end,
+            scheduler_randomize_order=update.scheduler_randomize_order,
         )
-        # Preserve python_executable default logic from model_validator
-        _ = current  # current values replaced wholesale by the update
         self._write(merged)
 
     def _write(self, data: BackendSettings) -> None:
@@ -55,4 +59,11 @@ class SettingsService:
             pushover_api_token=s.pushover_api_token,
             tracker_script=str(self._paths.tracker_script),
             watchlist_file=str(self._paths.watchlist_file),
+            scheduler_enabled=s.scheduler_enabled,
+            scheduler_min_interval_seconds=s.scheduler_min_interval_seconds,
+            scheduler_max_interval_seconds=s.scheduler_max_interval_seconds,
+            scheduler_quiet_hours_enabled=s.scheduler_quiet_hours_enabled,
+            scheduler_quiet_hours_start=s.scheduler_quiet_hours_start,
+            scheduler_quiet_hours_end=s.scheduler_quiet_hours_end,
+            scheduler_randomize_order=s.scheduler_randomize_order,
         )

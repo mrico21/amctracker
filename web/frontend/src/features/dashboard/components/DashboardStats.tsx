@@ -1,12 +1,24 @@
 import { Bell, CheckCircle, Clock, List } from 'lucide-react'
 import type { InfoResponse, RunResult } from '@/api/types'
 import { StatCard } from '@/components/common/StatCard'
-import { StatusBadge } from '@/components/common/StatusBadge'
 import { formatRelativeTime } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 interface DashboardStatsProps {
   info: InfoResponse | undefined
   latestRun: RunResult | null | undefined
+}
+
+const STATUS_STYLES: Record<string, { label: string; className: string }> = {
+  success: { label: 'Success', className: 'text-emerald-600 dark:text-emerald-400' },
+  partial_failure: { label: 'Partial', className: 'text-amber-600 dark:text-amber-400' },
+  failed: { label: 'Failed', className: 'text-red-500 dark:text-red-400' },
+}
+
+function StatusValue({ status }: { status: string | null | undefined }) {
+  if (!status) return <span>—</span>
+  const style = STATUS_STYLES[status] ?? { label: status, className: 'text-foreground' }
+  return <span className={cn(style.className)}>{style.label}</span>
 }
 
 export function DashboardStats({ info, latestRun }: DashboardStatsProps) {
@@ -21,13 +33,7 @@ export function DashboardStats({ info, latestRun }: DashboardStatsProps) {
       />
       <StatCard
         label="Status"
-        value={
-          info?.last_run_status ? (
-            <StatusBadge status={info.last_run_status} />
-          ) : (
-            '—'
-          )
-        }
+        value={<StatusValue status={info?.last_run_status} />}
         icon={<CheckCircle className="h-4 w-4" />}
       />
       <StatCard

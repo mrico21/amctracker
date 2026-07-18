@@ -4,10 +4,12 @@ from fastapi import Depends
 
 from web.config.paths import ProjectPaths
 from web.models.settings import BackendSettings
+from web.services.activity_service import ActivityService
 from web.services.health_service import HealthService
 from web.services.history_service import HistoryService
 from web.services.info_service import InfoService
 from web.services.run_service import RunService
+from web.services.scheduler_service import SchedulerService
 from web.services.settings_service import SettingsService
 from web.services.tracker_runner import TrackerRunner
 from web.services.watchlist_service import WatchlistService
@@ -50,8 +52,18 @@ def get_watchlist_service(
 
 
 @lru_cache()
+def get_activity_service() -> ActivityService:
+    return ActivityService(get_project_paths())
+
+
+@lru_cache()
 def get_tracker_runner() -> TrackerRunner:
-    return TrackerRunner(get_project_paths())
+    return TrackerRunner(get_project_paths(), get_activity_service())
+
+
+@lru_cache()
+def get_scheduler_service() -> SchedulerService:
+    return SchedulerService(get_project_paths(), get_tracker_runner(), get_activity_service())
 
 
 def get_is_running(

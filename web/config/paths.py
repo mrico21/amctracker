@@ -16,3 +16,5 @@ class ProjectPaths:
         self.settings_file: Path = web_root / "data" / "settings.json"
         self.logs_dir: Path = web_root / "logs"
         self.frontend_dist: Path = web_root / "frontend" / "dist"
+        self.scheduler_state_file: Path = web_root / "data" / "scheduler_state.json"
+        self.activity_file: Path = web_root / "data" / "activity.json"

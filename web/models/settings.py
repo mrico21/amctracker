@@ -10,6 +10,13 @@ class BackendSettings(BaseModel):
     cors_origins: list[str] = ["*"]
     pushover_user_key: str = ""
     pushover_api_token: str = ""
+    scheduler_enabled: bool = False
+    scheduler_min_interval_seconds: int = 600
+    scheduler_max_interval_seconds: int = 1800
+    scheduler_quiet_hours_enabled: bool = False
+    scheduler_quiet_hours_start: str = "23:00"
+    scheduler_quiet_hours_end: str = "07:00"
+    scheduler_randomize_order: bool = False
 
     @model_validator(mode="after")
     def fill_python_default(self) -> "BackendSettings":
@@ -30,6 +37,13 @@ class SettingsUpdate(BaseModel):
     cors_origins: list[str]
     pushover_user_key: str = ""
     pushover_api_token: str = ""
+    scheduler_enabled: bool = False
+    scheduler_min_interval_seconds: int = 600
+    scheduler_max_interval_seconds: int = 1800
+    scheduler_quiet_hours_enabled: bool = False
+    scheduler_quiet_hours_start: str = "23:00"
+    scheduler_quiet_hours_end: str = "07:00"
+    scheduler_randomize_order: bool = False
 
 
 class SettingsResponse(BaseModel):
@@ -41,3 +55,10 @@ class SettingsResponse(BaseModel):
     pushover_api_token: str
     tracker_script: str
     watchlist_file: str
+    scheduler_enabled: bool
+    scheduler_min_interval_seconds: int
+    scheduler_max_interval_seconds: int
+    scheduler_quiet_hours_enabled: bool
+    scheduler_quiet_hours_start: str
+    scheduler_quiet_hours_end: str
+    scheduler_randomize_order: bool

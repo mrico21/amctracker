@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from web.api.dependencies import get_project_paths
+from web.api.dependencies import get_project_paths, get_scheduler_service
 from web.api.v1 import router as v1_router
 from web.services.settings_service import SettingsService
 from web.startup.watchlist_migration import ensure_watchlist_ids
@@ -33,8 +33,11 @@ async def lifespan(app: FastAPI):
     logger.info(f"  python_executable={_startup_settings.python_executable}")
     logger.info(f"  run_timeout_seconds={_startup_settings.run_timeout_seconds}")
     logger.info(f"  cors_origins={_startup_settings.cors_origins}")
+    scheduler = get_scheduler_service()
+    scheduler.start(_startup_settings)
     yield
     logger.info("AMCTracker API shutting down")
+    scheduler.stop()
 
 
 app = FastAPI(
