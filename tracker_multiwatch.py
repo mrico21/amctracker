@@ -28,6 +28,8 @@ _STORAGE_STATE_FILE = _PLAYWRIGHT_DIR / "storage_state.json"
 LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 RESERVABLE_TYPES = {"CanReserve", "LoveSeatLeft", "LoveSeatRight"}
 _SMALL_PAGE_THRESHOLD = 200_000  # chars; real AMC pages are ~944KB+; Cloudflare block pages are ~7KB
+_BACKOFF_BASE_SECONDS = 10.0    # first retry delay; doubles on each subsequent attempt
+_BACKOFF_MAX_ATTEMPTS = 3       # 1 initial fetch + 2 retries
 TRACKER_VERSION = "1.0.5"
 
 _RUN_START: float = 0.0
@@ -454,12 +456,22 @@ def _log_response_diagnostics(response, label: str = "") -> None:
             _ts(f"{prefix}: {display}: {val}")
 
 
-def _fetch_page(page, url: str) -> str:
-    """Navigate *page* to *url* and return full HTML. Does not open or close the browser."""
+def _fetch_page(page, url: str, _meta: dict | None = None) -> str:
+    """Navigate *page* to *url* and return full HTML. Does not open or close the browser.
+
+    If *_meta* is provided it is populated with response metadata:
+        status (int), cf_ray (str), cf_mitigated (str), retry_after (str).
+    """
     _ts(f"fetch_page: goto {url}")
     response = page.goto(url, timeout=120_000)
     _ts("fetch_page: goto returned — waiting for networkidle")
     _log_response_diagnostics(response, label=url.split("/")[-1])
+    if _meta is not None and response is not None:
+        h = response.headers
+        _meta["status"] = response.status
+        _meta["cf_ray"] = h.get("cf-ray", "")
+        _meta["cf_mitigated"] = h.get("cf-mitigated", "")
+        _meta["retry_after"] = h.get("retry-after", "")
     try:
         page.wait_for_load_state("networkidle", timeout=15_000)
         _ts("fetch_page: networkidle reached")
@@ -473,16 +485,42 @@ def _fetch_page(page, url: str) -> str:
     return html
 
 
-def _fetch_with_retry(page, url: str) -> str:
-    """Fetch *url* using *page*; if a challenge page is detected, wait 8–15s and retry once."""
-    html = _fetch_page(page, url)
-    if len(html) < _SMALL_PAGE_THRESHOLD:
-        delay = random.uniform(8.0, 15.0)
-        _ts(f"fetch_with_retry: challenge page on attempt 1 ({len(html):,} chars) — retrying after {delay:.1f}s")
+def _fetch_with_backoff(page, url: str) -> str:
+    """Fetch *url* with exponential backoff on Cloudflare challenge/rate-limit responses.
+
+    Makes up to _BACKOFF_MAX_ATTEMPTS attempts:
+    - Full-size page (>= _SMALL_PAGE_THRESHOLD chars): success, return immediately.
+    - HTTP 403 hard block: give up after the first attempt — retrying a firewall rule
+      wastes time and will not succeed.
+    - Small page with HTTP 429 or 200: wait _BACKOFF_BASE_SECONDS * 2^(attempt-1)
+      with ±20% jitter, then retry.
+
+    Delay schedule (with jitter): ~10s, ~20s between successive attempts.
+    """
+    for attempt in range(1, _BACKOFF_MAX_ATTEMPTS + 1):
+        meta: dict = {}
+        html = _fetch_page(page, url, _meta=meta)
+        status = meta.get("status", 0)
+
+        if len(html) >= _SMALL_PAGE_THRESHOLD:
+            if attempt > 1:
+                _ts(f"fetch_with_backoff: success on attempt {attempt}")
+            return html
+
+        if status == 403:
+            _ts(f"fetch_with_backoff: HTTP 403 hard block — not retrying")
+            return html
+
+        if attempt == _BACKOFF_MAX_ATTEMPTS:
+            _ts(f"fetch_with_backoff: still blocked after {attempt} attempt(s) — giving up")
+            return html
+
+        delay = _BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)) * random.uniform(0.8, 1.2)
+        _ts(
+            f"fetch_with_backoff: HTTP {status} block ({len(html):,} chars) "
+            f"attempt {attempt}/{_BACKOFF_MAX_ATTEMPTS} — retrying after {delay:.1f}s"
+        )
         time.sleep(delay)
-        html = _fetch_page(page, url)
-        _ts(f"fetch_with_retry: attempt 2 returned {len(html):,} chars")
-    return html
 
 
 def _process_watchlist_body(
@@ -1667,6 +1705,7 @@ def main():
     cache_hits = cache_misses = notifications_sent = 0
     wl_results = []
     _debug_html_saved = False
+    cf_blocked_wls: list[str] = []   # names of watchlists that hit a Cloudflare block
 
     with PlaywrightSession(storage_state_path=_STORAGE_STATE_FILE) as session:
         browser_launch_s = session.browser_launch_seconds
@@ -1723,7 +1762,7 @@ def main():
                 else:
                     logging.info("[%s] CACHE MISS  %s", wl_name, url)
                     _ts(f"FETCH BEGIN: {url}")
-                    html = _fetch_with_retry(page, url)
+                    html = _fetch_with_backoff(page, url)
                     html_cache[url] = html
                     cache_misses += 1
                     _ts(f"FETCH DONE: {len(html):,} chars received")
@@ -1751,6 +1790,7 @@ def main():
                         except Exception as _save_exc:
                             logging.warning("[%s] could not save debug HTML: %s", wl_name, _save_exc)
                     failed_challenge += 1
+                    cf_blocked_wls.append(wl_name)
                 elif failure_type == "EXPIRED_URL":
                     msg = f"full page received ({len(html):,} chars) but seatingLayout is absent -- showtime may be expired or URL is invalid"
                     logging.warning("[%s] %s: %s", wl_name, failure_type, msg)
@@ -1802,6 +1842,10 @@ def main():
             f"    Parse error      : {failed_parse}",
             f"    Playwright error : {failed_playwright}",
         ]
+        if cf_blocked_wls:
+            summary_lines.append("  Cloudflare-blocked watchlists:")
+            for name in cf_blocked_wls:
+                summary_lines.append(f"    [BLOCKED] {name}")
     summary_lines += [
         f"Unique URLs          : {unique_urls}",
         f"Cache hits           : {cache_hits}",
