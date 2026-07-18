@@ -49,7 +49,7 @@ export default function Dashboard() {
         actions={
           <Button
             size="sm"
-            onClick={() => setConfirmOpen(true)}
+            onClick={() => { console.log('[DIAG] Run Now button clicked'); setConfirmOpen(true) }}
             disabled={isRunning || triggerRun.isPending}
           >
             <Play className="h-4 w-4" />
@@ -87,7 +87,7 @@ export default function Dashboard() {
         title="Start a tracker run?"
         description="AMCTracker will check seat availability for all enabled watchlists. This takes 30–90 seconds."
         confirmLabel="Run Now"
-        onConfirm={() => triggerRun.mutate()}
+        onConfirm={() => { console.log('[DIAG] ConfirmDialog onConfirm fired'); triggerRun.mutate() }}
       />
     </PageContainer>
   )

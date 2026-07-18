@@ -20,7 +20,16 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, options)
+  const url = `${BASE}${path}`
+  console.log('[DIAG] fetch start', url, options)
+  let res: Response
+  try {
+    res = await fetch(url, options)
+  } catch (err) {
+    console.log('[DIAG] fetch threw exception', url, err)
+    throw err
+  }
+  console.log('[DIAG] fetch response', url, 'status=', res.status, 'ok=', res.ok)
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText })) as { detail?: string }
     throw new ApiError(body.detail ?? `HTTP ${res.status}`, res.status)
@@ -33,11 +42,13 @@ function get<T>(path: string): Promise<T> {
 }
 
 function post<T>(path: string, body?: unknown): Promise<T> {
-  return request<T>(path, {
+  const opts: RequestInit = {
     method: 'POST',
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  }
+  console.log('[DIAG] post called', `${BASE}${path}`, opts)
+  return request<T>(path, opts)
 }
 
 export const apiClient = {

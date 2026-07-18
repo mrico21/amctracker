@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from web.api.dependencies import get_run_service
@@ -15,14 +17,20 @@ from web.models.run_result import RunResult
 from web.services.run_service import RunService
 
 router = APIRouter(tags=["runs"])
+_diag_log = logging.getLogger(__name__)
 
 
 @router.post("/run", response_model=RunResult)
 async def trigger_run(
     service: RunService = Depends(get_run_service),
 ) -> RunResult:
+    _diag_log.warning("[DIAG] POST /run entered")
+    print("[DIAG] POST /run entered", flush=True)
     try:
-        return await service.trigger_run()
+        result = await service.trigger_run()
+        _diag_log.warning("[DIAG] POST /run returning result")
+        print("[DIAG] POST /run returning result", flush=True)
+        return result
     except RunAlreadyInProgressError:
         raise HTTPException(status_code=409, detail="A tracker run is already in progress")
     except TrackerNotFoundError:
