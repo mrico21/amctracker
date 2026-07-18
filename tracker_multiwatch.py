@@ -1156,6 +1156,7 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Save raw HTML to disk")
     parser.add_argument("--simulate-available", metavar="SEAT", action="append", default=[], help="Override seat to AVAILABLE (testing only)")
     parser.add_argument("--test-notification", action="store_true", help="Send a test Pushover message and exit")
+    parser.add_argument("--force-adjacent-notification", action="store_true", help="Directly call send_adjacent_notification with fake data and exit (diagnostic only)")
     parser.add_argument("--json-output", metavar="PATH", help="Write a JSON run summary to PATH after each tracking run")
     args = parser.parse_args()
 
@@ -1242,6 +1243,30 @@ def main():
             pass
         send_notification(wl_url, "TEST", "UNAVAILABLE", "AVAILABLE", wl_name)
         print("Test notification sent.")
+        return
+
+    if args.force_adjacent_notification:
+        wl_name, wl_url = "TEST", ""
+        try:
+            with open(WATCHLIST, encoding="utf-8") as f:
+                data = json.load(f)
+            for entry in data.get("watchlists", []):
+                if entry.get("enabled", True):
+                    wl_name = entry.get("name", "TEST")
+                    wl_url = entry.get("showtime_url", "")
+                    break
+        except Exception as e:
+            print(f"WARNING: could not load watchlist ({e}), using placeholder values")
+        fake_windows = ["F10-F11", "F11-F12"]
+        print(f"--- force-adjacent-notification ---")
+        print(f"watchlist : {wl_name}")
+        print(f"url       : {wl_url}")
+        print(f"windows   : {fake_windows}")
+        print(f"count     : 2")
+        print()
+        result = send_adjacent_notification(wl_url, wl_name, fake_windows, 2)
+        print()
+        print(f"send_adjacent_notification returned: {result}")
         return
 
     watchlists = load_watchlists()
