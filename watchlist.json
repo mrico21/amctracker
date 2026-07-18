@@ -7,11 +7,11 @@
       "watch_adjacent": [
         {
           "rows": [
-            "I",
             "J",
             "K",
             "L",
-            "M"
+            "M",
+            "N"
           ],
           "count": 2
         }
@@ -26,8 +26,8 @@
           "rows": [
             "H",
             "I",
-            "K",
-            "J"
+            "J",
+            "K"
           ],
           "count": 2
         }
@@ -36,37 +36,163 @@
       "id": "e0a08d09-2ac7-45b0-b205-46e6d1a2b080"
     },
     {
-      "name": "The Odyssey - Fri Jul 24 7:00 PM",
-      "showtime_url": "https://www.amctheatres.com/showtimes/143822639/seats",
+      "name": "The Odyssey - Tues Jul 21 6pm",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822627/seats",
+      "enabled": true,
       "watch_adjacent": [
         {
           "rows": [
-            "I",
             "J",
             "K",
             "L",
-            "M"
+            "M",
+            "N"
           ],
           "count": 2
         }
       ],
-      "enabled": true,
-      "id": "6f86f7e9-f96d-4a10-81a8-a8b2c3711d2b"
+      "id": "8647b007-502c-4f81-8839-a1af61a92cf8"
     },
     {
-      "name": "Scary Movie 11:45pm",
-      "showtime_url": "https://www.amctheatres.com/showtimes/144254871/seats",
+      "name": "The Odyssey - Fri Jul 24 7pm",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822639/seats",
+      "enabled": true,
       "watch_adjacent": [
         {
           "rows": [
-            "D",
-            "E",
-            "F"
+            "J",
+            "K",
+            "L",
+            "M",
+            "N"
           ],
           "count": 2
         }
       ],
-      "id": "e657d843-f3ac-44e2-aa4c-dd795fadda26"
+      "id": "f703146d-6fda-46b6-8e99-346b8a792e45"
+    },
+    {
+      "name": "The Odyssey - Mon Jul 27 6pm",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822662/seats",
+      "enabled": true,
+      "watch_adjacent": [
+        {
+          "rows": [
+            "J",
+            "K",
+            "L",
+            "M",
+            "N"
+          ],
+          "count": 2
+        }
+      ],
+      "id": "00b1d33d-ed92-4fe4-a911-19bebf92f67b"
+    },
+    {
+      "name": "The Odyssey - Tue Jul 28 6pm",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822667/seats",
+      "enabled": true,
+      "watch_adjacent": [
+        {
+          "rows": [
+            "J",
+            "K",
+            "L",
+            "M",
+            "N"
+          ],
+          "count": 2
+        }
+      ],
+      "id": "a54d1456-56c9-4f4c-a8ba-3704ce1a4d6e"
+    },
+    {
+      "name": "The Odyssey - Wed Jul 29 6pm",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822659/seats",
+      "enabled": true,
+      "watch_adjacent": [
+        {
+          "rows": [
+            "J",
+            "K",
+            "L",
+            "M",
+            "N"
+          ],
+          "count": 2
+        }
+      ],
+      "id": "aa998f09-8b23-4913-a173-c6e9bf0ad3d7"
+    },
+    {
+      "name": "The Odyssey - Thu Jul 30 6pm",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822655/seats",
+      "enabled": true,
+      "watch_adjacent": [
+        {
+          "rows": [
+            "J",
+            "K",
+            "L",
+            "M",
+            "N"
+          ],
+          "count": 2
+        }
+      ],
+      "id": "3fe32298-4a62-46ce-a282-7a4e5677acf0"
+    },
+    {
+      "name": "The Odyssey - Sat Jul 18 3pm",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822614/seats",
+      "enabled": true,
+      "watch_adjacent": [
+        {
+          "rows": [
+            "J",
+            "K",
+            "L",
+            "M",
+            "N"
+          ],
+          "count": 2
+        }
+      ],
+      "id": "c7ddd330-c265-48a1-858d-9817ced8b57e"
+    },
+    {
+      "name": "The Odyssey - Sat Jul 18 11pm",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143822615/seats",
+      "enabled": true,
+      "watch_adjacent": [
+        {
+          "rows": [
+            "J",
+            "K",
+            "L",
+            "M",
+            "N"
+          ],
+          "count": 2
+        }
+      ],
+      "id": "fac2349e-cadd-43f1-bbe3-6c8b1912811e"
+    },
+    {
+      "name": "Toy Story 5 - Sat Jul 18 5:55pm",
+      "showtime_url": "https://www.amctheatres.com/showtimes/145199692/seats",
+      "enabled": true,
+      "watch_adjacent": [
+        {
+          "rows": [
+            "F",
+            "G"
+          ],
+          "count": 2
+        }
+      ],
+      "id": "9a4e467c-1ae8-4d92-a243-e269198378f7"
     }
   ]
 }
