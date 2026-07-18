@@ -300,9 +300,26 @@ def save_state(state: dict) -> None:
     tmp.replace(STATE_FILE)
 
 
+def _get_pushover_credentials() -> tuple[str, str]:
+    # Env vars take priority for backwards compatibility
+    user_key = os.environ.get("PUSHOVER_USER_KEY", "")
+    api_token = os.environ.get("PUSHOVER_API_TOKEN", "")
+    if user_key and api_token:
+        return user_key, api_token
+    # Fall back to web/data/settings.json
+    try:
+        settings_path = Path(__file__).parent / "web" / "data" / "settings.json"
+        if settings_path.is_file():
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+            user_key = user_key or data.get("pushover_user_key", "")
+            api_token = api_token or data.get("pushover_api_token", "")
+    except Exception:
+        pass
+    return user_key, api_token
+
+
 def send_notification(showtime_url: str, seat_name: str, old: str, new: str, wl_name: str) -> bool:
-    user_key = os.environ.get("PUSHOVER_USER_KEY")
-    api_token = os.environ.get("PUSHOVER_API_TOKEN")
+    user_key, api_token = _get_pushover_credentials()
     if not user_key or not api_token:
         return False
     try:
@@ -323,8 +340,7 @@ def send_notification(showtime_url: str, seat_name: str, old: str, new: str, wl_
 
 
 def send_any_notification(showtime_url: str, wl_name: str, newly_available: list[str]) -> bool:
-    user_key = os.environ.get("PUSHOVER_USER_KEY")
-    api_token = os.environ.get("PUSHOVER_API_TOKEN")
+    user_key, api_token = _get_pushover_credentials()
     if not user_key or not api_token:
         return False
     try:
@@ -347,8 +363,7 @@ def send_any_notification(showtime_url: str, wl_name: str, newly_available: list
 def send_adjacent_notification(showtime_url: str, wl_name: str, windows: list[str], count: int) -> bool:
     logging.info("[DEBUG] send_adjacent_notification entered  wl=%s  windows=%s", wl_name, windows)
     print(f"[DEBUG] send_adjacent_notification entered  wl={wl_name}  windows={windows}")
-    user_key = os.environ.get("PUSHOVER_USER_KEY")
-    api_token = os.environ.get("PUSHOVER_API_TOKEN")
+    user_key, api_token = _get_pushover_credentials()
     logging.info("[DEBUG] credentials  user_key_set=%s  api_token_set=%s", bool(user_key), bool(api_token))
     print(f"[DEBUG] credentials  user_key_set={bool(user_key)}  api_token_set={bool(api_token)}")
     if not user_key or not api_token:
@@ -780,14 +795,13 @@ def show_health() -> None:
         print("[FAIL] requests not installed")
         issues.append("requests not installed")
 
-    user_key = os.environ.get("PUSHOVER_USER_KEY")
-    api_token = os.environ.get("PUSHOVER_API_TOKEN")
+    user_key, api_token = _get_pushover_credentials()
     if user_key and api_token:
         print("[OK]   Pushover configured")
     else:
-        missing = [k for k, v in [("PUSHOVER_USER_KEY", user_key), ("PUSHOVER_API_TOKEN", api_token)] if not v]
+        missing = [n for n, v in [("pushover_user_key", user_key), ("pushover_api_token", api_token)] if not v]
         print(f"[WARN] Pushover not configured ({', '.join(missing)} missing)")
-        warnings.append("Pushover env vars missing")
+        warnings.append("Pushover credentials missing")
 
     print()
     if wl_data is not None:
@@ -1227,10 +1241,9 @@ def main():
         return
 
     if args.test_notification:
-        user_key = os.environ.get("PUSHOVER_USER_KEY")
-        api_token = os.environ.get("PUSHOVER_API_TOKEN")
+        user_key, api_token = _get_pushover_credentials()
         if not user_key or not api_token:
-            print("ERROR: PUSHOVER_USER_KEY and PUSHOVER_API_TOKEN must be set")
+            print("ERROR: Pushover credentials not configured (set PUSHOVER_USER_KEY/PUSHOVER_API_TOKEN env vars or add to web/data/settings.json)")
             sys.exit(1)
         wl_name, wl_url = "TEST", ""
         try:

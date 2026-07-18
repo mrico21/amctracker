@@ -15,6 +15,22 @@ STATE_FILE = Path(__file__).parent / "state.json"
 LOG_FILE = Path(__file__).parent / "tracker.log"
 
 
+def _get_pushover_credentials() -> tuple[str, str]:
+    user_key = os.environ.get("PUSHOVER_USER_KEY", "")
+    api_token = os.environ.get("PUSHOVER_API_TOKEN", "")
+    if user_key and api_token:
+        return user_key, api_token
+    try:
+        settings_path = Path(__file__).parent / "web" / "data" / "settings.json"
+        if settings_path.is_file():
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+            user_key = user_key or data.get("pushover_user_key", "")
+            api_token = api_token or data.get("pushover_api_token", "")
+    except Exception:
+        pass
+    return user_key, api_token
+
+
 def load_watchlist():
     with open(WATCHLIST, encoding="utf-8") as f:
         data = json.load(f)
@@ -105,8 +121,7 @@ def save_state(state: dict) -> None:
 
 
 def send_notification(showtime_url: str, name: str, old: str, new: str) -> None:
-    user_key = os.environ.get("PUSHOVER_USER_KEY")
-    api_token = os.environ.get("PUSHOVER_API_TOKEN")
+    user_key, api_token = _get_pushover_credentials()
     if not user_key or not api_token:
         return
     try:
@@ -141,10 +156,9 @@ def main():
     logging.info("--- run started ---")
 
     if args.test_notification:
-        user_key = os.environ.get("PUSHOVER_USER_KEY")
-        api_token = os.environ.get("PUSHOVER_API_TOKEN")
+        user_key, api_token = _get_pushover_credentials()
         if not user_key or not api_token:
-            print("ERROR: PUSHOVER_USER_KEY and PUSHOVER_API_TOKEN must be set")
+            print("ERROR: Pushover credentials not configured (set PUSHOVER_USER_KEY/PUSHOVER_API_TOKEN env vars or add to web/data/settings.json)")
             sys.exit(1)
         send_notification("https://www.amctheatres.com", "TEST", "UNAVAILABLE", "AVAILABLE")
         print("Test notification sent.")

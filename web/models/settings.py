@@ -8,6 +8,8 @@ class BackendSettings(BaseModel):
     max_history_runs: int = 50
     python_executable: str = ""
     cors_origins: list[str] = ["*"]
+    pushover_user_key: str = ""
+    pushover_api_token: str = ""
 
     @model_validator(mode="after")
     def fill_python_default(self) -> "BackendSettings":
@@ -26,6 +28,8 @@ class SettingsUpdate(BaseModel):
     max_history_runs: int
     python_executable: str
     cors_origins: list[str]
+    pushover_user_key: str = ""
+    pushover_api_token: str = ""
 
 
 class SettingsResponse(BaseModel):
@@ -33,5 +37,7 @@ class SettingsResponse(BaseModel):
     max_history_runs: int
     python_executable: str
     cors_origins: list[str]
+    pushover_user_key: str
+    pushover_api_token: str
     tracker_script: str
     watchlist_file: str
