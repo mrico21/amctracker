@@ -6,6 +6,7 @@ import re
 import shutil
 import sys
 import socket
+import traceback
 import uuid
 from copy import deepcopy
 from dataclasses import dataclass
@@ -1478,16 +1479,20 @@ def main():
                 if config_newly_available:
                     print(f"NEWLY AVAILABLE (adjacent): {', '.join(config_newly_available)}")
                     logging.info("ADJACENT-AVAILABLE  [%s]  count=%d  %s", wl_name, count, ", ".join(config_newly_available))
-                    logging.info("[DEBUG] calling send_adjacent_notification  notifications_sent_before=%d", notifications_sent)
-                    print(f"[DEBUG] calling send_adjacent_notification  notifications_sent_before={notifications_sent}")
-                    _notif_result = send_adjacent_notification(url, wl_name, config_newly_available, count)
-                    logging.info("[DEBUG] send_adjacent_notification returned %s", _notif_result)
-                    print(f"[DEBUG] send_adjacent_notification returned {_notif_result}")
-                    if _notif_result:
-                        notifications_sent += 1
-                        wl_notif_sent = True
-                        logging.info("[DEBUG] notifications_sent incremented to %d", notifications_sent)
-                        print(f"[DEBUG] notifications_sent incremented to {notifications_sent}")
+                    try:
+                        logging.info("[DEBUG] calling send_adjacent_notification  notifications_sent_before=%d", notifications_sent)
+                        print(f"[DEBUG] calling send_adjacent_notification  notifications_sent_before={notifications_sent}")
+                        _notif_result = send_adjacent_notification(url, wl_name, config_newly_available, count)
+                        logging.info("[DEBUG] send_adjacent_notification returned %s", _notif_result)
+                        print(f"[DEBUG] send_adjacent_notification returned {_notif_result}")
+                        if _notif_result:
+                            notifications_sent += 1
+                            wl_notif_sent = True
+                            logging.info("[DEBUG] notifications_sent incremented to %d", notifications_sent)
+                            print(f"[DEBUG] notifications_sent incremented to {notifications_sent}")
+                    except Exception:
+                        print("[DEBUG] EXCEPTION in notification block:")
+                        traceback.print_exc()
 
             _seats_avail = sum(
                 1 for k, v in current.items()
