@@ -23,6 +23,8 @@ WATCHLIST = Path(__file__).parent / "watchlist.json"
 STATE_FILE = Path(__file__).parent / "state.json"
 LOG_FILE = Path(__file__).parent / "tracker.log"
 _DEBUG_DIR = Path(__file__).parent / "web" / "data" / "debug"
+_PLAYWRIGHT_DIR = Path(__file__).parent / "web" / "data" / "playwright"
+_STORAGE_STATE_FILE = _PLAYWRIGHT_DIR / "storage_state.json"
 LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 RESERVABLE_TYPES = {"CanReserve", "LoveSeatLeft", "LoveSeatRight"}
 _SMALL_PAGE_THRESHOLD = 200_000  # chars; real AMC pages are ~944KB+; Cloudflare block pages are ~7KB
@@ -286,16 +288,24 @@ def scan_seating_layouts(html: str) -> list:
 class PlaywrightSession:
     """Single Playwright + Chromium + BrowserContext for an entire run.
 
+    Optionally restores and persists Playwright storage state (cookies +
+    localStorage) across runs to maintain a legitimate browsing session.
+
     Usage:
-        with PlaywrightSession() as session:
+        with PlaywrightSession(storage_state_path=_STORAGE_STATE_FILE) as session:
             page = session.new_page()
+            session.warm_up(page)
             ...
+            session.save_storage_state()
     """
 
-    def __init__(self) -> None:
+    _AMC_HOMEPAGE = "https://www.amctheatres.com/"
+
+    def __init__(self, storage_state_path: Path | None = None) -> None:
         self._pw = None
         self._browser = None
         self._context = None
+        self._storage_state_path = storage_state_path
         self.browser_launch_seconds: float = 0.0
 
     def __enter__(self) -> "PlaywrightSession":
@@ -304,10 +314,25 @@ class PlaywrightSession:
         self._pw = sync_playwright().start()
         _ts("PLAYWRIGHT: launching Chromium")
         self._browser = self._pw.chromium.launch(headless=True)
-        self._context = self._browser.new_context()
+        self._context = self._create_context()
         self.browser_launch_seconds = time.monotonic() - t0
         _ts(f"PLAYWRIGHT: browser + context ready in {self.browser_launch_seconds:.2f}s")
         return self
+
+    def _create_context(self):
+        """Return a new context, restoring storage state if available and valid."""
+        path = self._storage_state_path
+        if path and path.is_file():
+            try:
+                raw = path.read_text(encoding="utf-8")
+                storage = json.loads(raw)
+                ctx = self._browser.new_context(storage_state=storage)
+                cookie_count = len(storage.get("cookies", []))
+                _ts(f"PLAYWRIGHT: restored storage state from {path} ({cookie_count} cookies)")
+                return ctx
+            except Exception as e:
+                _ts(f"PLAYWRIGHT: storage state invalid ({e}) — starting fresh context")
+        return self._browser.new_context()
 
     def __exit__(self, *_) -> None:
         for obj, method in [
@@ -323,6 +348,65 @@ class PlaywrightSession:
 
     def new_page(self):
         return self._context.new_page()
+
+    def warm_up(self, page) -> None:
+        """Navigate to the AMC homepage to establish session cookies.
+
+        Logs homepage load time, final URL, and all cookies set by the page.
+        Waits a randomized 2–5s after loading to mimic human timing.
+        """
+        _ts(f"WARMUP: navigating to {self._AMC_HOMEPAGE}")
+        t0 = time.monotonic()
+        page.goto(self._AMC_HOMEPAGE, timeout=60_000)
+        try:
+            page.wait_for_load_state("networkidle", timeout=15_000)
+        except PlaywrightTimeoutError:
+            page.wait_for_timeout(5_000)
+        load_time = time.monotonic() - t0
+        final_url = page.url
+        _ts(f"WARMUP: homepage loaded in {load_time:.2f}s — final URL: {final_url}")
+
+        cookies = self._context.cookies()
+        _ts(f"WARMUP: {len(cookies)} cookies in context after homepage")
+        for c in cookies:
+            exp = c.get("expires", -1)
+            if exp and exp > 0:
+                try:
+                    exp_str = datetime.fromtimestamp(exp).strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    exp_str = str(exp)
+            else:
+                exp_str = "session"
+            logging.info(
+                "COOKIE  name=%-35s  domain=%-28s  secure=%-5s  httpOnly=%-5s  expires=%s",
+                c.get("name", "?"),
+                c.get("domain", "?"),
+                c.get("secure", False),
+                c.get("httpOnly", False),
+                exp_str,
+            )
+
+        delay = random.uniform(2.0, 5.0)
+        _ts(f"WARMUP: post-homepage delay {delay:.1f}s")
+        time.sleep(delay)
+
+    def save_storage_state(self) -> None:
+        """Persist cookies + localStorage to disk for the next run.
+
+        Must be called while the context is still open (before __exit__).
+        Failures are logged at WARNING and never crash the tracker.
+        """
+        path = self._storage_state_path
+        if not path:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            storage = self._context.storage_state()
+            path.write_text(json.dumps(storage, indent=2), encoding="utf-8")
+            cookie_count = len(storage.get("cookies", []))
+            _ts(f"PLAYWRIGHT: storage state saved ({cookie_count} cookies) -> {path}")
+        except Exception as e:
+            logging.warning("PLAYWRIGHT: could not save storage state: %s", e)
 
 
 def _fetch_page(page, url: str) -> str:
@@ -1538,9 +1622,10 @@ def main():
     wl_results = []
     _debug_html_saved = False
 
-    with PlaywrightSession() as session:
+    with PlaywrightSession(storage_state_path=_STORAGE_STATE_FILE) as session:
         browser_launch_s = session.browser_launch_seconds
         page = session.new_page()
+        session.warm_up(page)
 
         for i, wl in enumerate(watchlists):
             wl_name = wl["name"]
@@ -1644,6 +1729,8 @@ def main():
                     adjacent_windows_available=0, notification_sent=False,
                     failure_type=failure_type, error_message=msg,
                 ))
+
+        session.save_storage_state()
 
     _ts("SAVE STATE: writing state.json")
     save_state(state)

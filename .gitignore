@@ -21,6 +21,7 @@ dist/
 # ======================================================
 web/data/runs/
 web/data/debug/
+web/data/playwright/
 web/data/settings.json
 web/logs/
 logs/
