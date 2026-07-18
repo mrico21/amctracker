@@ -7,9 +7,7 @@ import re
 import shutil
 import sys
 import socket
-import threading
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -532,167 +530,6 @@ def _process_watchlist_body(
         error_message=None,
     )
     return current, result, notifications
-
-
-def _run_worker(
-    worker_id: int,
-    assignments: list,          # list of (orig_idx, wl_dict)
-    session: "PlaywrightSession",
-    html_cache: dict,
-    cache_lock: threading.Lock,
-    debug_lock: threading.Lock,
-    debug_saved: list,          # [bool] — mutable so workers share one flag
-    full_state: dict,
-    args,
-) -> list:
-    """Process one worker's share of watchlists using a single dedicated page.
-
-    Returns a list of outcome dicts in the order they were processed.
-    Each dict carries all data needed by the caller to merge counters / state.
-    """
-    page = session.new_page()
-    outcomes = []
-    try:
-        for slot, (orig_idx, wl) in enumerate(assignments):
-            wl_name = wl["name"]
-
-            if slot > 0:
-                delay = random.uniform(1.0, 4.0)
-                _ts(f"[W{worker_id}] inter-request delay {delay:.1f}s before {wl_name}")
-                time.sleep(delay)
-
-            # --- Disabled watchlist ---
-            if not wl.get("enabled", True):
-                print(f"\n=== {wl_name} [DISABLED] ===")
-                logging.info("[%s] disabled — skipped", wl_name)
-                outcomes.append({
-                    "orig_idx": orig_idx,
-                    "status": "skipped",
-                    "current_state": {},
-                    "wl_result": WatchlistResult(
-                        name=wl_name, enabled=False,
-                        showtime_url=wl.get("showtime_url", ""),
-                        watch_seats=wl.get("watch_seats", []),
-                        watch_any=wl.get("watch_any", []),
-                        watch_adjacent=wl.get("watch_adjacent", []),
-                        status="skipped", seats_available=0,
-                        adjacent_windows_available=0, notification_sent=False,
-                        failure_type=None, error_message=None,
-                    ),
-                    "notifications": 0,
-                    "cache_hit": False,
-                    "f_challenge": 0, "f_expired": 0, "f_parse": 0, "f_playwright": 0,
-                })
-                continue
-
-            # --- Enabled watchlist ---
-            html = ""
-            wl_start = time.monotonic()
-            url = wl["showtime_url"].strip()
-
-            _ts(f"[W{worker_id}] WATCHLIST BEGIN: {wl_name}")
-            print(f"\n=== {wl_name} ===")
-            print(f"Showtime : {url}")
-            if wl.get("watch_seats"):
-                print(f"Watching : {', '.join(wl['watch_seats'])}")
-            if wl.get("watch_any"):
-                print(f"Watch-any: {', '.join(wl['watch_any'])}")
-            for adj in wl.get("watch_adjacent", []):
-                print(f"Watch-adj: rows {','.join(adj.get('rows', []))}, {adj.get('count', 2)}-seat windows")
-            print("Loading page...")
-
-            try:
-                with cache_lock:
-                    cached = html_cache.get(url)
-
-                if cached is not None:
-                    logging.info("[%s] CACHE HIT  %s", wl_name, url)
-                    print("(cache hit -- reusing fetched HTML)")
-                    _ts(f"[W{worker_id}] FETCH: cache hit")
-                    html = cached
-                    cache_hit = True
-                else:
-                    logging.info("[%s] CACHE MISS  %s", wl_name, url)
-                    _ts(f"[W{worker_id}] FETCH BEGIN: {url}")
-                    html = _fetch_with_retry(page, url)
-                    with cache_lock:
-                        if url not in html_cache:
-                            html_cache[url] = html
-                    cache_hit = False
-                    _ts(f"[W{worker_id}] FETCH DONE: {len(html):,} chars")
-
-                prev_state = full_state.get(wl_name, {})
-                current, wl_result, notifications = _process_watchlist_body(wl, html, prev_state, args)
-                _ts(f"[W{worker_id}] WATCHLIST DONE: {wl_name} — elapsed {time.monotonic() - wl_start:.2f}s")
-                outcomes.append({
-                    "orig_idx": orig_idx,
-                    "status": "success",
-                    "current_state": current,
-                    "wl_result": wl_result,
-                    "notifications": notifications,
-                    "cache_hit": cache_hit,
-                    "f_challenge": 0, "f_expired": 0, "f_parse": 0, "f_playwright": 0,
-                })
-
-            except Exception as exc:
-                _ts(f"[W{worker_id}] WATCHLIST ERROR: {wl_name} — elapsed {time.monotonic() - wl_start:.2f}s")
-                failure_type = classify_page_failure(html, exc)
-                f_challenge = f_expired = f_parse = f_playwright = 0
-
-                if failure_type == "CHALLENGE_PAGE":
-                    msg = f"page received ({len(html):,} chars) is too small for a valid seat map -- Cloudflare or rate-limit block"
-                    logging.warning("[%s] %s: %s", wl_name, failure_type, msg)
-                    with debug_lock:
-                        should_save = not debug_saved[0] and bool(html)
-                        if should_save:
-                            debug_saved[0] = True
-                    if should_save:
-                        try:
-                            saved_path = _save_debug_html(html, "challenge")
-                            logging.warning("[%s] debug HTML saved to %s", wl_name, saved_path)
-                            print(f"[debug] challenge page HTML saved to {saved_path}")
-                        except Exception as _save_exc:
-                            logging.warning("[%s] could not save debug HTML: %s", wl_name, _save_exc)
-                    f_challenge = 1
-                elif failure_type == "EXPIRED_URL":
-                    msg = f"full page received ({len(html):,} chars) but seatingLayout is absent -- showtime may be expired or URL is invalid"
-                    logging.warning("[%s] %s: %s", wl_name, failure_type, msg)
-                    f_expired = 1
-                elif failure_type == "PARSE_ERROR":
-                    msg = f"seatingLayout found but could not be parsed -- possible AMC page structure change; {exc}"
-                    logging.exception("[%s] %s: %s", wl_name, failure_type, msg)
-                    f_parse = 1
-                else:
-                    msg = str(exc)
-                    logging.exception("[%s] %s: %s", wl_name, failure_type, msg)
-                    f_playwright = 1
-
-                print(f"\n[{failure_type}] {wl_name}: {msg}")
-                outcomes.append({
-                    "orig_idx": orig_idx,
-                    "status": "failed",
-                    "current_state": {},
-                    "wl_result": WatchlistResult(
-                        name=wl_name, enabled=True,
-                        showtime_url=wl.get("showtime_url", ""),
-                        watch_seats=wl.get("watch_seats", []),
-                        watch_any=wl.get("watch_any", []),
-                        watch_adjacent=wl.get("watch_adjacent", []),
-                        status="failed", seats_available=0,
-                        adjacent_windows_available=0, notification_sent=False,
-                        failure_type=failure_type, error_message=msg,
-                    ),
-                    "notifications": 0,
-                    "cache_hit": False,
-                    "f_challenge": f_challenge, "f_expired": f_expired,
-                    "f_parse": f_parse, "f_playwright": f_playwright,
-                })
-    finally:
-        try:
-            page.close()
-        except Exception:
-            pass
-    return outcomes
 
 
 def _save_debug_html(html: str, prefix: str) -> str:
@@ -1596,10 +1433,7 @@ def main():
     parser.add_argument("--simulate-available", metavar="SEAT", action="append", default=[], help="Override seat to AVAILABLE (testing only)")
     parser.add_argument("--test-notification", action="store_true", help="Send a test Pushover message and exit")
     parser.add_argument("--json-output", metavar="PATH", help="Write a JSON run summary to PATH after each tracking run")
-    parser.add_argument("--workers", metavar="N", type=int, default=2,
-                        help="Concurrent page workers for normal runs (1-4, default 2)")
     args = parser.parse_args()
-    args.workers = min(4, max(1, args.workers))
 
     global _RUN_START
     _RUN_START = time.monotonic()
@@ -1694,66 +1528,122 @@ def main():
     _ts(f"STARTUP: watchlist loaded — {len(watchlists)} entries")
 
     state = load_state()
+    html_cache: dict = {}
     run_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)
     start_time = time.monotonic()
-
-    # Distribute watchlists round-robin across workers (preserves relative order within each worker)
-    num_workers = min(args.workers, len([w for w in watchlists if w.get("enabled", True)]) or 1)
-    assignments: list[list] = [[] for _ in range(num_workers)]
-    for i, wl in enumerate(watchlists):
-        assignments[i % num_workers].append((i, wl))
-    assignments = [a for a in assignments if a]
-
-    html_cache: dict = {}
-    cache_lock = threading.Lock()
-    debug_lock = threading.Lock()
-    debug_saved = [False]  # mutable flag shared across workers
-
-    all_outcomes: dict[int, dict] = {}  # orig_idx -> outcome dict
-
-    with PlaywrightSession() as session:
-        browser_launch_s = session.browser_launch_seconds
-
-        with ThreadPoolExecutor(max_workers=num_workers) as pool:
-            futures = {
-                pool.submit(
-                    _run_worker, wid, partition, session,
-                    html_cache, cache_lock, debug_lock, debug_saved, state, args,
-                ): wid
-                for wid, partition in enumerate(assignments)
-            }
-            for future in as_completed(futures):
-                for outcome in future.result():
-                    all_outcomes[outcome["orig_idx"]] = outcome
-
-    # Merge results in original watchlist order
     processed = skipped = failed = 0
     failed_challenge = failed_expired = failed_parse = failed_playwright = 0
     cache_hits = cache_misses = notifications_sent = 0
     wl_results = []
+    _debug_html_saved = False
 
-    for orig_idx in range(len(watchlists)):
-        outcome = all_outcomes[orig_idx]
-        status = outcome["status"]
-        wl_results.append(outcome["wl_result"])
-        notifications_sent += outcome["notifications"]
-        if outcome["cache_hit"]:
-            cache_hits += 1
-        elif status != "skipped":
-            cache_misses += 1
+    with PlaywrightSession() as session:
+        browser_launch_s = session.browser_launch_seconds
+        page = session.new_page()
 
-        if status == "success":
-            state[outcome["wl_result"].name] = outcome["current_state"]
-            processed += 1
-        elif status == "skipped":
-            skipped += 1
-        else:
-            failed += 1
-            failed_challenge += outcome["f_challenge"]
-            failed_expired += outcome["f_expired"]
-            failed_parse += outcome["f_parse"]
-            failed_playwright += outcome["f_playwright"]
+        for i, wl in enumerate(watchlists):
+            wl_name = wl["name"]
+
+            # Inter-request delay between watchlists (skip before the first one)
+            if i > 0 and wl.get("enabled", True):
+                delay = random.uniform(1.0, 4.0)
+                _ts(f"inter-request delay {delay:.1f}s before {wl_name}")
+                time.sleep(delay)
+
+            if not wl.get("enabled", True):
+                print(f"\n=== {wl_name} [DISABLED] ===")
+                logging.info("[%s] disabled — skipped", wl_name)
+                skipped += 1
+                wl_results.append(WatchlistResult(
+                    name=wl_name, enabled=False,
+                    showtime_url=wl.get("showtime_url", ""),
+                    watch_seats=wl.get("watch_seats", []),
+                    watch_any=wl.get("watch_any", []),
+                    watch_adjacent=wl.get("watch_adjacent", []),
+                    status="skipped", seats_available=0,
+                    adjacent_windows_available=0, notification_sent=False,
+                    failure_type=None, error_message=None,
+                ))
+                continue
+
+            html = ""
+            wl_start = time.monotonic()
+            url = wl["showtime_url"].strip()
+
+            _ts(f"WATCHLIST BEGIN: {wl_name}")
+            print(f"\n=== {wl_name} ===")
+            print(f"Showtime : {url}")
+            if wl.get("watch_seats"):
+                print(f"Watching : {', '.join(wl['watch_seats'])}")
+            if wl.get("watch_any"):
+                print(f"Watch-any: {', '.join(wl['watch_any'])}")
+            for adj in wl.get("watch_adjacent", []):
+                print(f"Watch-adj: rows {','.join(adj.get('rows', []))}, {adj.get('count', 2)}-seat windows")
+            print("Loading page...")
+
+            try:
+                if url in html_cache:
+                    logging.info("[%s] CACHE HIT  %s", wl_name, url)
+                    print("(cache hit -- reusing fetched HTML)")
+                    _ts(f"FETCH: cache hit for {url}")
+                    html = html_cache[url]
+                    cache_hits += 1
+                else:
+                    logging.info("[%s] CACHE MISS  %s", wl_name, url)
+                    _ts(f"FETCH BEGIN: {url}")
+                    html = _fetch_with_retry(page, url)
+                    html_cache[url] = html
+                    cache_misses += 1
+                    _ts(f"FETCH DONE: {len(html):,} chars received")
+
+                prev_state = state.get(wl_name, {})
+                current, wl_result, notif_count = _process_watchlist_body(wl, html, prev_state, args)
+                _ts(f"WATCHLIST DONE: {wl_name} — elapsed {time.monotonic() - wl_start:.2f}s")
+                state[wl_name] = current
+                notifications_sent += notif_count
+                wl_results.append(wl_result)
+                processed += 1
+
+            except Exception as exc:
+                _ts(f"WATCHLIST ERROR: {wl_name} — elapsed {time.monotonic() - wl_start:.2f}s")
+                failure_type = classify_page_failure(html, exc)
+                if failure_type == "CHALLENGE_PAGE":
+                    msg = f"page received ({len(html):,} chars) is too small for a valid seat map -- Cloudflare or rate-limit block"
+                    logging.warning("[%s] %s: %s", wl_name, failure_type, msg)
+                    if not _debug_html_saved and html:
+                        try:
+                            saved_path = _save_debug_html(html, "challenge")
+                            logging.warning("[%s] debug HTML saved to %s", wl_name, saved_path)
+                            print(f"[debug] challenge page HTML saved to {saved_path}")
+                            _debug_html_saved = True
+                        except Exception as _save_exc:
+                            logging.warning("[%s] could not save debug HTML: %s", wl_name, _save_exc)
+                    failed_challenge += 1
+                elif failure_type == "EXPIRED_URL":
+                    msg = f"full page received ({len(html):,} chars) but seatingLayout is absent -- showtime may be expired or URL is invalid"
+                    logging.warning("[%s] %s: %s", wl_name, failure_type, msg)
+                    failed_expired += 1
+                elif failure_type == "PARSE_ERROR":
+                    msg = f"seatingLayout found but could not be parsed -- possible AMC page structure change; {exc}"
+                    logging.exception("[%s] %s: %s", wl_name, failure_type, msg)
+                    failed_parse += 1
+                else:
+                    msg = str(exc)
+                    logging.exception("[%s] %s: %s", wl_name, failure_type, msg)
+                    failed_playwright += 1
+                print(f"\n[{failure_type}] {wl_name}: {msg}")
+                failed += 1
+                wl_results.append(WatchlistResult(
+                    name=wl_name, enabled=True,
+                    showtime_url=wl.get("showtime_url", ""),
+                    watch_seats=wl.get("watch_seats", []),
+                    watch_any=wl.get("watch_any", []),
+                    watch_adjacent=wl.get("watch_adjacent", []),
+                    status="failed", seats_available=0,
+                    adjacent_windows_available=0, notification_sent=False,
+                    failure_type=failure_type, error_message=msg,
+                ))
 
     _ts("SAVE STATE: writing state.json")
     save_state(state)
@@ -1787,7 +1677,6 @@ def main():
         f"Duration             : {duration:.2f} sec",
         "",
         "## Performance",
-        f"Workers              : {num_workers}",
         f"Browser launch       : {browser_launch_s:.2f} sec",
         f"Avg per watchlist    : {avg_per_wl:.2f} sec",
         f"Challenge pages      : {failed_challenge}",
