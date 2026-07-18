@@ -4,7 +4,7 @@ from pydantic import BaseModel, model_validator
 
 
 class BackendSettings(BaseModel):
-    run_timeout_seconds: int = 300
+    run_timeout_seconds: int = 900  # DIAG: temporarily increased from 300
     max_history_runs: int = 50
     python_executable: str = ""
     cors_origins: list[str] = ["*"]
