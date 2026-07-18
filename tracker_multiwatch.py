@@ -409,11 +409,57 @@ class PlaywrightSession:
             logging.warning("PLAYWRIGHT: could not save storage state: %s", e)
 
 
+def _log_response_diagnostics(response, label: str = "") -> None:
+    """Log HTTP status, redirect chain, and key response headers for a page.goto() response.
+
+    Runs after every fetch so that successful and failing responses can be compared
+    side-by-side. All output goes through _ts() so it appears in both stdout and tracker.log.
+    """
+    prefix = f"RESPONSE[{label}]" if label else "RESPONSE"
+
+    if response is None:
+        _ts(f"{prefix}: no response object (navigation may have failed silently)")
+        return
+
+    # Build redirect chain by walking request.redirected_from back to origin.
+    # Playwright sets redirected_from on the *destination* request, pointing at the
+    # request that triggered the redirect, so we iterate backwards and then reverse.
+    chain: list[str] = [response.url]
+    req = response.request.redirected_from
+    while req is not None:
+        chain.insert(0, req.url)
+        req = req.redirected_from
+
+    _ts(f"{prefix}: HTTP {response.status}")
+    if len(chain) > 1:
+        _ts(f"{prefix}: {len(chain) - 1} redirect(s):")
+        for step in chain[:-1]:
+            _ts(f"{prefix}:   {step}")
+        _ts(f"{prefix}:   => {chain[-1]}  (final)")
+    else:
+        _ts(f"{prefix}: final URL: {response.url}")
+
+    # Playwright normalises all header names to lowercase.
+    h = response.headers
+    for key, display in [
+        ("server",           "Server"),
+        ("cf-ray",           "CF-Ray"),
+        ("cf-cache-status",  "CF-Cache-Status"),
+        ("cf-mitigated",     "CF-Mitigated"),
+        ("retry-after",      "Retry-After"),
+        ("content-type",     "Content-Type"),
+    ]:
+        val = h.get(key)
+        if val is not None:
+            _ts(f"{prefix}: {display}: {val}")
+
+
 def _fetch_page(page, url: str) -> str:
     """Navigate *page* to *url* and return full HTML. Does not open or close the browser."""
     _ts(f"fetch_page: goto {url}")
-    page.goto(url, timeout=120_000)
+    response = page.goto(url, timeout=120_000)
     _ts("fetch_page: goto returned — waiting for networkidle")
+    _log_response_diagnostics(response, label=url.split("/")[-1])
     try:
         page.wait_for_load_state("networkidle", timeout=15_000)
         _ts("fetch_page: networkidle reached")
@@ -432,10 +478,10 @@ def _fetch_with_retry(page, url: str) -> str:
     html = _fetch_page(page, url)
     if len(html) < _SMALL_PAGE_THRESHOLD:
         delay = random.uniform(8.0, 15.0)
-        _ts(f"fetch_with_retry: challenge page ({len(html):,} chars) — retrying after {delay:.1f}s")
+        _ts(f"fetch_with_retry: challenge page on attempt 1 ({len(html):,} chars) — retrying after {delay:.1f}s")
         time.sleep(delay)
         html = _fetch_page(page, url)
-        _ts(f"fetch_with_retry: retry returned {len(html):,} chars")
+        _ts(f"fetch_with_retry: attempt 2 returned {len(html):,} chars")
     return html
 
 
