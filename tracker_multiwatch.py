@@ -6,7 +6,6 @@ import re
 import shutil
 import sys
 import socket
-import traceback
 import uuid
 from copy import deepcopy
 from dataclasses import dataclass
@@ -26,10 +25,6 @@ LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 RESERVABLE_TYPES = {"CanReserve", "LoveSeatLeft", "LoveSeatRight"}
 _SMALL_PAGE_THRESHOLD = 200_000  # chars; real AMC pages are ~944KB+; Cloudflare block pages are ~7KB
 TRACKER_VERSION = "1.0.5"
-
-# Set to a watchlist name to enable adjacent-seat debug output for row G.
-# Example: DEBUG_ADJACENT_WATCHLIST = "The Odyssey - Wed Jul 22"
-DEBUG_ADJACENT_WATCHLIST = None
 
 
 @dataclass
@@ -361,19 +356,11 @@ def send_any_notification(showtime_url: str, wl_name: str, newly_available: list
 
 
 def send_adjacent_notification(showtime_url: str, wl_name: str, windows: list[str], count: int) -> bool:
-    logging.info("[DEBUG] send_adjacent_notification entered  wl=%s  windows=%s", wl_name, windows)
-    print(f"[DEBUG] send_adjacent_notification entered  wl={wl_name}  windows={windows}")
     user_key, api_token = _get_pushover_credentials()
-    logging.info("[DEBUG] credentials  user_key_set=%s  api_token_set=%s", bool(user_key), bool(api_token))
-    print(f"[DEBUG] credentials  user_key_set={bool(user_key)}  api_token_set={bool(api_token)}")
     if not user_key or not api_token:
-        logging.info("[DEBUG] send_adjacent_notification returning False (missing credentials)")
-        print("[DEBUG] send_adjacent_notification returning False (missing credentials)")
         return False
     try:
-        logging.info("[DEBUG] attempting Pushover HTTP request")
-        print("[DEBUG] attempting Pushover HTTP request")
-        resp = requests.post(
+        requests.post(
             "https://api.pushover.net/1/messages.json",
             data={
                 "token": api_token,
@@ -383,14 +370,9 @@ def send_adjacent_notification(showtime_url: str, wl_name: str, windows: list[st
             },
             timeout=10,
         )
-        logging.info("[DEBUG] Pushover HTTP response  status=%d  body=%s", resp.status_code, resp.text[:200])
-        print(f"[DEBUG] Pushover HTTP response  status={resp.status_code}  body={resp.text[:200]}")
         logging.info("adjacent-notification sent  %s  count=%d  %s", wl_name, count, ", ".join(windows))
-    except requests.RequestException as e:
-        logging.info("[DEBUG] Pushover request raised RequestException: %s", e)
-        print(f"[DEBUG] Pushover request raised RequestException: {e}")
-    logging.info("[DEBUG] send_adjacent_notification returning True")
-    print("[DEBUG] send_adjacent_notification returning True")
+    except requests.RequestException:
+        pass
     return True
 
 
@@ -1170,7 +1152,6 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Save raw HTML to disk")
     parser.add_argument("--simulate-available", metavar="SEAT", action="append", default=[], help="Override seat to AVAILABLE (testing only)")
     parser.add_argument("--test-notification", action="store_true", help="Send a test Pushover message and exit")
-    parser.add_argument("--force-adjacent-notification", action="store_true", help="Directly call send_adjacent_notification with fake data and exit (diagnostic only)")
     parser.add_argument("--json-output", metavar="PATH", help="Write a JSON run summary to PATH after each tracking run")
     args = parser.parse_args()
 
@@ -1256,30 +1237,6 @@ def main():
             pass
         send_notification(wl_url, "TEST", "UNAVAILABLE", "AVAILABLE", wl_name)
         print("Test notification sent.")
-        return
-
-    if args.force_adjacent_notification:
-        wl_name, wl_url = "TEST", ""
-        try:
-            with open(WATCHLIST, encoding="utf-8") as f:
-                data = json.load(f)
-            for entry in data.get("watchlists", []):
-                if entry.get("enabled", True):
-                    wl_name = entry.get("name", "TEST")
-                    wl_url = entry.get("showtime_url", "")
-                    break
-        except Exception as e:
-            print(f"WARNING: could not load watchlist ({e}), using placeholder values")
-        fake_windows = ["F10-F11", "F11-F12"]
-        print(f"--- force-adjacent-notification ---")
-        print(f"watchlist : {wl_name}")
-        print(f"url       : {wl_url}")
-        print(f"windows   : {fake_windows}")
-        print(f"count     : 2")
-        print()
-        result = send_adjacent_notification(wl_url, wl_name, fake_windows, 2)
-        print()
-        print(f"send_adjacent_notification returned: {result}")
         return
 
     watchlists = load_watchlists()
@@ -1449,22 +1406,6 @@ def main():
                     row_seats.sort()
                     seat_names = [s[1] for s in row_seats]
 
-                    # TEMP DEBUG
-                    debug_adj = (
-                        DEBUG_ADJACENT_WATCHLIST is not None
-                        and wl_name == DEBUG_ADJACENT_WATCHLIST
-                        and row.upper() == "G"
-                    )
-                    if debug_adj:
-                        print(f"\n[DEBUG] Row G: {len(seat_names)} seat(s) discovered")
-                        for sn in seat_names:
-                            s = seat_map.get(sn)
-                            if s:
-                                print(f"  {sn}  type={s.get('type', '?')}  available={s.get('available')}")
-                            else:
-                                print(f"  {sn}  NOT IN seat_map")
-                        print(f"[DEBUG] Seat order: {', '.join(seat_names)}")
-
                     for i in range(len(seat_names) - count + 1):
                         window = seat_names[i:i + count]
                         state_key = "adj:" + "-".join(window)
@@ -1484,22 +1425,6 @@ def main():
                                 all_avail = False
                                 break
 
-                        # TEMP DEBUG
-                        if debug_adj:
-                            if all_avail:
-                                print(f"  Window {display} -> AVAILABLE")
-                            else:
-                                fail_detail = ""
-                                for sn in window:
-                                    s = seat_map.get(sn)
-                                    if s is None:
-                                        fail_detail = f"{sn} not in seat_map"
-                                        break
-                                    if not (s.get("available") is True and s.get("type") in RESERVABLE_TYPES):
-                                        fail_detail = f"{sn} type={s.get('type', '?')} available={s.get('available')}"
-                                        break
-                                print(f"  Window {display} -> FAILED ({fail_detail})")
-
                         current[state_key] = "AVAILABLE" if all_avail else "UNAVAILABLE"
                         if all_avail:
                             logging.info("[%s] adjacent %s  AVAILABLE", wl_name, display)
@@ -1517,20 +1442,9 @@ def main():
                 if config_newly_available:
                     print(f"NEWLY AVAILABLE (adjacent): {', '.join(config_newly_available)}")
                     logging.info("ADJACENT-AVAILABLE  [%s]  count=%d  %s", wl_name, count, ", ".join(config_newly_available))
-                    try:
-                        logging.info("[DEBUG] calling send_adjacent_notification  notifications_sent_before=%d", notifications_sent)
-                        print(f"[DEBUG] calling send_adjacent_notification  notifications_sent_before={notifications_sent}")
-                        _notif_result = send_adjacent_notification(url, wl_name, config_newly_available, count)
-                        logging.info("[DEBUG] send_adjacent_notification returned %s", _notif_result)
-                        print(f"[DEBUG] send_adjacent_notification returned {_notif_result}")
-                        if _notif_result:
-                            notifications_sent += 1
-                            wl_notif_sent = True
-                            logging.info("[DEBUG] notifications_sent incremented to %d", notifications_sent)
-                            print(f"[DEBUG] notifications_sent incremented to {notifications_sent}")
-                    except Exception:
-                        print("[DEBUG] EXCEPTION in notification block:")
-                        traceback.print_exc()
+                    if send_adjacent_notification(url, wl_name, config_newly_available, count):
+                        notifications_sent += 1
+                        wl_notif_sent = True
 
             _seats_avail = sum(
                 1 for k, v in current.items()
