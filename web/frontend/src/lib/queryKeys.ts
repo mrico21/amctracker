@@ -4,6 +4,7 @@ export const queryKeys = {
   settings: () => ['settings'] as const,
   watchlists: () => ['watchlists'] as const,
   latestRun: () => ['run', 'latest'] as const,
+  jobStatus: () => ['run', 'status'] as const,
   history: {
     all: () => ['history'] as const,
     run: (runId: string) => ['history', runId] as const,

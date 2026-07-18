@@ -12,6 +12,7 @@ class ProjectPaths:
         self.watchlist_file: Path = project_root / "watchlist.json"
         self.runs_dir: Path = web_root / "data" / "runs"
         self.latest_run_file: Path = web_root / "data" / "runs" / "latest.json"
+        self.job_status_file: Path = web_root / "data" / "runs" / "job_status.json"
         self.settings_file: Path = web_root / "data" / "settings.json"
         self.logs_dir: Path = web_root / "logs"
         self.frontend_dist: Path = web_root / "frontend" / "dist"

@@ -127,3 +127,18 @@ export interface RunTriggerResponse {
   status: string
   message: string
 }
+
+// ── Job status (background run progress) ──────────────────────────────────────
+
+export type JobStatusValue = 'idle' | 'starting' | 'running' | 'finished' | 'failed' | 'cancelled'
+
+export interface JobStatus {
+  status: JobStatusValue
+  run_id: string | null
+  started_at: string | null
+  elapsed_seconds: number
+  current_watchlist: string | null
+  completed_watchlists: number
+  total_watchlists: number
+  error_message: string | null
+}

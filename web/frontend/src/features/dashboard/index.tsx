@@ -7,6 +7,7 @@ import { PageContainer } from '@/components/common/PageContainer'
 import { Button } from '@/components/ui/button'
 import { useHealth } from '@/hooks/useHealth'
 import { useInfo } from '@/hooks/useInfo'
+import { useJobStatus } from '@/hooks/useJobStatus'
 import { useLatestRun } from '@/hooks/useLatestRun'
 import { useTriggerRun } from '@/hooks/useTriggerRun'
 import { DashboardStats } from './components/DashboardStats'
@@ -24,10 +25,22 @@ export default function Dashboard() {
   const triggerRun = useTriggerRun()
 
   const info = infoQuery.data
-  const isRunning = info?.run_in_progress ?? false
+  const infoRunning = info?.run_in_progress ?? false
+
+  // Poll job status whenever a run is active (info says running, or trigger was just fired)
+  const jobStatusActive = infoRunning || triggerRun.isPending || triggerRun.isSuccess
+  const jobStatusQuery = useJobStatus(jobStatusActive)
+  const jobStatus = jobStatusQuery.data
+
+  // Treat as running if info reports it OR the job status says so (covers the 202→first-poll gap)
+  const activeJobStatus = jobStatus?.status
+  const isRunning =
+    infoRunning ||
+    activeJobStatus === 'starting' ||
+    activeJobStatus === 'running'
 
   // Invalidate caches when a run transitions from in-progress → done
-  useRunCompletion(info?.run_in_progress)
+  useRunCompletion(infoRunning)
 
   if (infoQuery.isError) {
     return (
@@ -49,7 +62,7 @@ export default function Dashboard() {
         actions={
           <Button
             size="sm"
-            onClick={() => { console.log('[DIAG] Run Now button clicked'); setConfirmOpen(true) }}
+            onClick={() => setConfirmOpen(true)}
             disabled={isRunning || triggerRun.isPending}
           >
             <Play className="h-4 w-4" />
@@ -58,7 +71,7 @@ export default function Dashboard() {
         }
       />
 
-      {isRunning && <RunProgressBanner />}
+      {isRunning && <RunProgressBanner jobStatus={jobStatus} />}
 
       {triggerRun.isError && (
         <div className="flex items-start gap-2.5 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3">
@@ -85,9 +98,9 @@ export default function Dashboard() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="Start a tracker run?"
-        description="AMCTracker will check seat availability for all enabled watchlists. This takes 30–90 seconds."
+        description="AMCTracker will check seat availability for all enabled watchlists. This takes 1–4 minutes."
         confirmLabel="Run Now"
-        onConfirm={() => { console.log('[DIAG] ConfirmDialog onConfirm fired'); triggerRun.mutate() }}
+        onConfirm={() => triggerRun.mutate()}
       />
     </PageContainer>
   )

@@ -42,6 +42,14 @@ def _ts(msg: str) -> None:
     logging.info(line)
 
 
+def _emit_event(event_type: str, **kwargs) -> None:
+    """Emit a structured progress event to stdout for the web API to parse."""
+    payload = json.dumps({"type": event_type, **kwargs}, separators=(",", ":"))
+    line = f"[EVT] {payload}"
+    print(line, flush=True)
+    logging.info(line)
+
+
 @dataclass
 class WatchlistResult:
     name: str
@@ -1706,6 +1714,10 @@ def main():
     wl_results = []
     _debug_html_saved = False
     cf_blocked_wls: list[str] = []   # names of watchlists that hit a Cloudflare block
+    total_enabled = sum(1 for wl in watchlists if wl.get("enabled", True))
+    enabled_idx = 0
+
+    _emit_event("run_start", total_watchlists=total_enabled)
 
     with PlaywrightSession(storage_state_path=_STORAGE_STATE_FILE) as session:
         browser_launch_s = session.browser_launch_seconds
@@ -1736,6 +1748,9 @@ def main():
                     failure_type=None, error_message=None,
                 ))
                 continue
+
+            enabled_idx += 1
+            _emit_event("watchlist_start", index=enabled_idx, total=total_enabled, name=wl_name)
 
             html = ""
             wl_start = time.monotonic()
@@ -1817,6 +1832,8 @@ def main():
                 ))
 
         session.save_storage_state()
+
+    _emit_event("run_end", succeeded=processed, failed=failed, notifications=notifications_sent)
 
     _ts("SAVE STATE: writing state.json")
     save_state(state)

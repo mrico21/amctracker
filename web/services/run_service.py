@@ -4,6 +4,7 @@ from pydantic import ValidationError
 
 from web.config.exceptions import NoRunsYetError, RunOutputInvalidError
 from web.config.paths import ProjectPaths
+from web.models.job_status import JobStatus
 from web.models.run_result import RunResult
 from web.models.settings import BackendSettings
 from web.services.tracker_runner import TrackerRunner
@@ -15,8 +16,15 @@ class RunService:
         self._settings = settings
         self._runner = runner
 
-    async def trigger_run(self) -> RunResult:
-        return await self._runner.execute(self._settings)
+    async def launch_background(self) -> None:
+        await self._runner.launch_background(self._settings)
+
+    def cancel(self) -> bool:
+        return self._runner.cancel()
+
+    @property
+    def job_status(self) -> JobStatus:
+        return self._runner.job_status
 
     def get_latest(self) -> RunResult:
         wf = self._paths.latest_run_file

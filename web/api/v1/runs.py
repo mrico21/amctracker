@@ -1,50 +1,47 @@
-import logging
-
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 from web.api.dependencies import get_run_service
 from web.config.exceptions import (
     NoRunsYetError,
     RunAlreadyInProgressError,
     RunOutputInvalidError,
-    RunOutputMissingError,
-    TrackerExecutionError,
-    TrackerLaunchError,
-    TrackerNotFoundError,
-    TrackerTimeoutError,
 )
+from web.models.job_status import JobStatus
 from web.models.run_result import RunResult
 from web.services.run_service import RunService
 
 router = APIRouter(tags=["runs"])
-_diag_log = logging.getLogger(__name__)
 
 
-@router.post("/run", response_model=RunResult)
+@router.post("/run", status_code=202)
 async def trigger_run(
     service: RunService = Depends(get_run_service),
-) -> RunResult:
-    _diag_log.warning("[DIAG] POST /run entered")
-    print("[DIAG] POST /run entered", flush=True)
+) -> JSONResponse:
     try:
-        result = await service.trigger_run()
-        _diag_log.warning("[DIAG] POST /run returning result")
-        print("[DIAG] POST /run returning result", flush=True)
-        return result
+        await service.launch_background()
     except RunAlreadyInProgressError:
         raise HTTPException(status_code=409, detail="A tracker run is already in progress")
-    except TrackerNotFoundError:
-        raise HTTPException(status_code=503, detail="Tracker script not found")
-    except TrackerLaunchError as e:
-        raise HTTPException(status_code=503, detail=f"Failed to launch tracker: {e.detail}")
-    except TrackerTimeoutError as e:
-        raise HTTPException(status_code=504, detail=f"Tracker timed out after {e.timeout_seconds}s")
-    except TrackerExecutionError as e:
-        raise HTTPException(status_code=502, detail=f"Tracker exited with code {e.exit_code}")
-    except RunOutputMissingError:
-        raise HTTPException(status_code=502, detail="Tracker produced no output")
-    except RunOutputInvalidError as e:
-        raise HTTPException(status_code=502, detail=f"Invalid tracker output: {e.detail}")
+    return JSONResponse(
+        status_code=202,
+        content={"status": "starting", "message": "Tracker run started"},
+    )
+
+
+@router.post("/run/cancel")
+async def cancel_run(
+    service: RunService = Depends(get_run_service),
+) -> dict:
+    if not service.cancel():
+        raise HTTPException(status_code=409, detail="No run is currently in progress")
+    return {"status": "cancelled"}
+
+
+@router.get("/run/status", response_model=JobStatus)
+async def get_run_status(
+    service: RunService = Depends(get_run_service),
+) -> JobStatus:
+    return service.job_status
 
 
 @router.get("/run/latest", response_model=RunResult)
