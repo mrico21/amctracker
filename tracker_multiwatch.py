@@ -783,52 +783,134 @@ def _get_pushover_credentials() -> tuple[str, str]:
     return user_key, api_token
 
 
-def _send_pushover(title: str, message: str) -> bool:
-    """Post one message to Pushover. Returns True if credentials exist and the
-    request was dispatched (delivery is not confirmed — see Phase 1 for retry
-    and NotificationResult). Returns False if credentials are not configured."""
+@dataclass(frozen=True)
+class NotificationResult:
+    delivered: bool
+    attempts: int
+    final_status_code: int | None
+    error: str | None
+
+
+_PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
+_NOTIF_MAX_ATTEMPTS = 3
+_NOTIF_RETRY_DELAYS = (5.0, 15.0)  # seconds before attempt 2 and 3
+
+
+def _send_pushover(title: str, message: str) -> NotificationResult:
+    """Post one message to Pushover with retry on transient failures.
+
+    Retry policy:
+    - HTTP 200: success, stop immediately.
+    - HTTP 429 or 5xx: transient; retry up to _NOTIF_MAX_ATTEMPTS times.
+      Respects Retry-After header on 429 if present; otherwise uses
+      _NOTIF_RETRY_DELAYS.
+    - HTTP 4xx (not 429): non-retryable; fail immediately.
+    - Network / timeout error: treated as transient; retry.
+
+    Returns NotificationResult(delivered=False) immediately (no network call)
+    when Pushover credentials are not configured.
+    """
     user_key, api_token = _get_pushover_credentials()
     if not user_key or not api_token:
-        return False
-    try:
-        requests.post(
-            "https://api.pushover.net/1/messages.json",
-            data={"token": api_token, "user": user_key, "title": title, "message": message},
-            timeout=10,
+        return NotificationResult(
+            delivered=False,
+            attempts=0,
+            final_status_code=None,
+            error="Pushover credentials not configured",
         )
-    except requests.RequestException:
-        pass
-    return True
+
+    last_status: int | None = None
+    last_error: str | None = None
+
+    for attempt in range(1, _NOTIF_MAX_ATTEMPTS + 1):
+        try:
+            resp = requests.post(
+                _PUSHOVER_URL,
+                data={"token": api_token, "user": user_key, "title": title, "message": message},
+                timeout=10,
+            )
+            last_status = resp.status_code
+
+            if resp.status_code == 200:
+                return NotificationResult(
+                    delivered=True,
+                    attempts=attempt,
+                    final_status_code=200,
+                    error=None,
+                )
+
+            # Hard failure — 4xx errors other than 429 will not improve on retry.
+            if resp.status_code not in (429,) and 400 <= resp.status_code < 500:
+                last_error = f"HTTP {resp.status_code} (non-retryable)"
+                logging.warning(
+                    "Pushover notification failed (non-retryable): HTTP %d — %s",
+                    resp.status_code, resp.text[:200],
+                )
+                break
+
+            # Transient: 429 or 5xx.
+            last_error = f"HTTP {resp.status_code}"
+            if attempt < _NOTIF_MAX_ATTEMPTS:
+                if resp.status_code == 429:
+                    delay = float(resp.headers.get("Retry-After", _NOTIF_RETRY_DELAYS[attempt - 1]))
+                else:
+                    delay = _NOTIF_RETRY_DELAYS[attempt - 1]
+                logging.warning(
+                    "Pushover notification attempt %d/%d failed (HTTP %d) — retrying in %.0fs",
+                    attempt, _NOTIF_MAX_ATTEMPTS, resp.status_code, delay,
+                )
+                time.sleep(delay)
+
+        except requests.RequestException as exc:
+            last_error = str(exc)
+            if attempt < _NOTIF_MAX_ATTEMPTS:
+                delay = _NOTIF_RETRY_DELAYS[attempt - 1]
+                logging.warning(
+                    "Pushover notification attempt %d/%d failed (%s) — retrying in %.0fs",
+                    attempt, _NOTIF_MAX_ATTEMPTS, exc, delay,
+                )
+                time.sleep(delay)
+
+    logging.error(
+        "Pushover notification FAILED after %d attempt(s): %s",
+        _NOTIF_MAX_ATTEMPTS, last_error,
+    )
+    return NotificationResult(
+        delivered=False,
+        attempts=_NOTIF_MAX_ATTEMPTS,
+        final_status_code=last_status,
+        error=last_error,
+    )
 
 
-def send_notification(showtime_url: str, seat_name: str, old: str, new: str, wl_name: str) -> bool:
-    sent = _send_pushover(
+def send_notification(showtime_url: str, seat_name: str, old: str, new: str, wl_name: str) -> NotificationResult:
+    result = _send_pushover(
         title=f"AMC Seat Alert — {wl_name}",
         message=f"{seat_name}: {old} -> {new}\n{showtime_url}",
     )
-    if sent:
+    if result.delivered:
         logging.info("notification sent  %s  %s  %s -> %s", wl_name, seat_name, old, new)
-    return sent
+    return result
 
 
-def send_any_notification(showtime_url: str, wl_name: str, newly_available: list[str]) -> bool:
-    sent = _send_pushover(
+def send_any_notification(showtime_url: str, wl_name: str, newly_available: list[str]) -> NotificationResult:
+    result = _send_pushover(
         title=f"AMC Seat Alert — {wl_name}",
         message="Available seats:\n" + "\n".join(newly_available) + f"\n{showtime_url}",
     )
-    if sent:
+    if result.delivered:
         logging.info("any-notification sent  %s  %s", wl_name, ", ".join(newly_available))
-    return sent
+    return result
 
 
-def send_adjacent_notification(showtime_url: str, wl_name: str, windows: list[str], count: int) -> bool:
-    sent = _send_pushover(
+def send_adjacent_notification(showtime_url: str, wl_name: str, windows: list[str], count: int) -> NotificationResult:
+    result = _send_pushover(
         title=f"AMC Seat Alert — {wl_name}",
         message="Adjacent seats available:\n\n" + "\n".join(windows) + f"\n{showtime_url}",
     )
-    if sent:
+    if result.delivered:
         logging.info("adjacent-notification sent  %s  count=%d  %s", wl_name, count, ", ".join(windows))
-    return sent
+    return result
 
 
 def _slug(name: str) -> str:
