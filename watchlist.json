@@ -162,37 +162,24 @@
       "id": "c7ddd330-c265-48a1-858d-9817ced8b57e"
     },
     {
-      "name": "The Odyssey - Sat Jul 18 11pm",
-      "showtime_url": "https://www.amctheatres.com/showtimes/143822615/seats",
-      "enabled": true,
-      "watch_adjacent": [
-        {
-          "rows": [
-            "J",
-            "K",
-            "L",
-            "M",
-            "N"
-          ],
-          "count": 2
-        }
-      ],
-      "id": "fac2349e-cadd-43f1-bbe3-6c8b1912811e"
-    },
-    {
-      "name": "Toy Story 5 - Sat Jul 18 5:55pm",
-      "showtime_url": "https://www.amctheatres.com/showtimes/145199692/seats",
+      "name": "The Odyssey - Sat 8:50pm - Burbank",
+      "showtime_url": "https://www.amctheatres.com/showtimes/143820338/seats",
       "enabled": true,
       "watch_adjacent": [
         {
           "rows": [
             "F",
-            "G"
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L"
           ],
           "count": 2
         }
       ],
-      "id": "9a4e467c-1ae8-4d92-a243-e269198378f7"
+      "id": "193b2bf9-9947-4fbd-8b7b-dc0a7671abbb"
     }
   ]
 }
