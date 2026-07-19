@@ -1,10 +1,11 @@
 import { useMemo } from 'react'
 import type { ActivityEvent } from '@/api/types'
 import { useEvents } from './useEvents'
+import { useInfo } from './useInfo'
 
 /**
  * Returns all activity events where payload.watchlist matches the given name,
- * newest-first. Polls at the standard resting rate (15s).
+ * newest-first. Polls at 2s during an active run, 15s otherwise.
  */
 export function useWatchlistEvents(name: string): {
   events: ActivityEvent[]
@@ -12,7 +13,8 @@ export function useWatchlistEvents(name: string): {
   isError: boolean
   error: Error | null
 } {
-  const eventsQuery = useEvents(false)
+  const { data: info } = useInfo()
+  const eventsQuery = useEvents(info?.run_in_progress ?? false)
 
   const events = useMemo(
     () =>

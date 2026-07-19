@@ -1,7 +1,7 @@
-import { ChevronLeft } from 'lucide-react'
 import { useMemo } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { AppHeader } from '@/components/common/AppHeader'
+import { BackLink } from '@/components/common/BackLink'
 import { CopyButton } from '@/components/common/CopyButton'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ErrorState } from '@/components/common/ErrorState'
@@ -20,7 +20,6 @@ import { WatchlistResultCard } from './components/WatchlistResultCard'
 
 export default function RunDetails() {
   const { runId } = useParams<{ runId: string }>()
-  const navigate = useNavigate()
 
   const runQuery = useHistoryRun(runId ?? '')
   const { byWatchlist } = useRunEvents(runQuery.data?.run_id)
@@ -35,22 +34,10 @@ export default function RunDetails() {
     return map
   }, [watchlistsQuery.data])
 
-  const goBack = () => void navigate('/history')
-
-  const backButton = (
-    <button
-      onClick={goBack}
-      className="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ChevronLeft className="h-4 w-4" />
-      History
-    </button>
-  )
-
   if (runQuery.isError) {
     return (
       <PageContainer>
-        {backButton}
+        <BackLink to="/history">History</BackLink>
         <AppHeader title="Run Details" />
         <ErrorState
           title="Could not load run"
@@ -64,7 +51,7 @@ export default function RunDetails() {
   if (runQuery.isLoading) {
     return (
       <PageContainer>
-        {backButton}
+        <BackLink to="/history">History</BackLink>
         <AppHeader title="Run Details" />
         <LoadingState message="Loading run details…" />
       </PageContainer>
@@ -84,7 +71,7 @@ export default function RunDetails() {
 
   return (
     <PageContainer>
-      {backButton}
+      <BackLink to="/history">History</BackLink>
 
       {/* Page header */}
       <div className="space-y-4">

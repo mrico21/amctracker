@@ -1,6 +1,7 @@
-import { ChevronLeft, ExternalLink, EyeOff } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { ExternalLink, EyeOff } from 'lucide-react'
+import { useParams } from 'react-router-dom'
 import { AppHeader } from '@/components/common/AppHeader'
+import { BackLink } from '@/components/common/BackLink'
 import { ErrorState } from '@/components/common/ErrorState'
 import { LoadingState } from '@/components/common/LoadingState'
 import { MonitoringConfig } from '@/components/common/MonitoringConfig'
@@ -16,27 +17,16 @@ import { WatchlistStatusCard } from './components/WatchlistStatusCard'
 
 export default function WatchlistDetail() {
   const { id = '' } = useParams<{ id: string }>()
-  const navigate = useNavigate()
 
   const watchlistQuery = useWatchlist(id)
   const { events, isLoading: eventsLoading } = useWatchlistEvents(
     watchlistQuery.data?.name ?? '',
   )
 
-  const goBack = () => void navigate('/watchlists')
-
-  // ── Error / loading states ──────────────────────────────────────────────────
-
   if (watchlistQuery.isError) {
     return (
       <PageContainer>
-        <button
-          onClick={goBack}
-          className="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Watchlists
-        </button>
+        <BackLink to="/watchlists">Watchlists</BackLink>
         <ErrorState
           title="Could not load watchlist"
           error={watchlistQuery.error}
@@ -49,13 +39,7 @@ export default function WatchlistDetail() {
   if (watchlistQuery.isLoading) {
     return (
       <PageContainer>
-        <button
-          onClick={goBack}
-          className="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Watchlists
-        </button>
+        <BackLink to="/watchlists">Watchlists</BackLink>
         <LoadingState message="Loading watchlist…" />
       </PageContainer>
     )
@@ -71,14 +55,7 @@ export default function WatchlistDetail() {
 
   return (
     <PageContainer>
-      {/* Back navigation */}
-      <button
-        onClick={goBack}
-        className="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Watchlists
-      </button>
+      <BackLink to="/watchlists">Watchlists</BackLink>
 
       {/* Header */}
       <AppHeader

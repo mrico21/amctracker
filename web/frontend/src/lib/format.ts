@@ -1,5 +1,5 @@
 export function formatRelativeTime(iso: string | null | undefined): string {
-  if (!iso) return 'Never'
+  if (!iso) return '—'
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
   if (diff < 60) return 'Just now'
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
@@ -26,4 +26,30 @@ export function formatDateTime(iso: string): string {
 
 export function truncateUuid(uuid: string): string {
   return uuid.slice(0, 8)
+}
+
+export function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  })
+}
+
+export function formatDateLabel(iso: string): string {
+  const d = new Date(iso)
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+  if (sameDay(d, today)) return 'Today'
+  if (sameDay(d, yesterday)) return 'Yesterday'
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+export function dayKey(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
 }

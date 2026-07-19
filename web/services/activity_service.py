@@ -10,7 +10,7 @@ from web.models.activity import ActivityEvent
 
 logger = logging.getLogger("amctracker.activity")
 
-_MAX_EVENTS = 100
+_MAX_EVENTS = 500
 
 
 class ActivityService:

@@ -8,7 +8,7 @@ interface RelativeTimeProps {
 
 export function RelativeTime({ iso, className }: RelativeTimeProps) {
   if (!iso) {
-    return <span className={cn(className)}>Never</span>
+    return <span className={cn(className)}>—</span>
   }
   return (
     <time dateTime={iso} title={formatDateTime(iso)} className={cn(className)}>

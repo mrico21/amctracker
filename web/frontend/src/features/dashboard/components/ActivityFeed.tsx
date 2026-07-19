@@ -1,99 +1,32 @@
-import {
-  ActivityIcon,
-  AlertTriangle,
-  Bell,
-  Calendar,
-  CalendarClock,
-  CheckCircle,
-  CircleDashed,
-  Play,
-  SkipForward,
-  XCircle,
-} from 'lucide-react'
+import { ActivityIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { ActivityEvent, ActivityEventType } from '@/api/types'
+import { EventDateDivider } from '@/components/common/EventDateDivider'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useWatchlists } from '@/hooks/useWatchlists'
-import { truncateUuid } from '@/lib/format'
+import { getEventStyle } from '@/lib/event-style'
+import { dayKey, formatDateLabel, formatTime, truncateUuid } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 // ── Low-signal events hidden in "Highlights" mode ────────────────────────────
 
 const LOW_SIGNAL_TYPES: ActivityEventType[] = ['watchlist_start', 'watchlist_complete', 'scheduler_skipped']
 
-// ── Event appearance ──────────────────────────────────────────────────────────
-
-type EventStyle = { icon: React.ReactNode; color: string; muted: boolean }
-
-function eventStyle(type: ActivityEventType): EventStyle {
-  switch (type) {
-    case 'run_start':
-      return { icon: <Play className="h-3.5 w-3.5" />, color: 'text-blue-600 dark:text-blue-400', muted: false }
-    case 'run_complete':
-      return { icon: <CheckCircle className="h-3.5 w-3.5" />, color: 'text-emerald-600 dark:text-emerald-400', muted: false }
-    case 'run_cancelled':
-      return { icon: <XCircle className="h-3.5 w-3.5" />, color: 'text-red-500 dark:text-red-400', muted: false }
-    case 'watchlist_start':
-      return { icon: <CircleDashed className="h-3.5 w-3.5" />, color: 'text-muted-foreground', muted: true }
-    case 'watchlist_complete':
-      return { icon: <CheckCircle className="h-3.5 w-3.5" />, color: 'text-muted-foreground', muted: true }
-    case 'watchlist_blocked':
-      return { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-600 dark:text-amber-400', muted: false }
-    case 'watchlist_failed':
-      return { icon: <XCircle className="h-3.5 w-3.5" />, color: 'text-red-500 dark:text-red-400', muted: false }
-    case 'notification_sent':
-      return { icon: <Bell className="h-3.5 w-3.5" />, color: 'text-emerald-600 dark:text-emerald-400', muted: false }
-    case 'scheduler_triggered':
-      return { icon: <Calendar className="h-3.5 w-3.5" />, color: 'text-blue-500 dark:text-blue-400', muted: false }
-    case 'scheduler_skipped':
-      return { icon: <SkipForward className="h-3.5 w-3.5" />, color: 'text-muted-foreground', muted: true }
-    default:
-      return { icon: <CalendarClock className="h-3.5 w-3.5" />, color: 'text-muted-foreground', muted: true }
-  }
-}
-
-// ── Time / date formatting ────────────────────────────────────────────────────
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-  })
-}
-
-function formatDateLabel(iso: string): string {
-  const d = new Date(iso)
-  const today = new Date()
-  const yesterday = new Date(today)
-  yesterday.setDate(today.getDate() - 1)
-  const sameDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-  if (sameDay(d, today)) return 'Today'
-  if (sameDay(d, yesterday)) return 'Yesterday'
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-function dayKey(iso: string): string {
-  const d = new Date(iso)
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
-
 // ── Single event row ──────────────────────────────────────────────────────────
 
 function EventRow({
   event,
   watchlistIdByName,
+  navigate,
 }: {
   event: ActivityEvent
   watchlistIdByName: Map<string, string>
+  navigate: ReturnType<typeof useNavigate>
 }) {
-  const navigate = useNavigate()
-  const { icon, color, muted } = eventStyle(event.event_type)
+  const { icon, color, muted } = getEventStyle(event.event_type)
 
   const watchlistName =
     typeof event.payload.watchlist === 'string' ? event.payload.watchlist : null
@@ -151,18 +84,6 @@ function EventRow({
   )
 }
 
-function DateDivider({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-2 py-1.5">
-      <div className="h-px flex-1 bg-border" />
-      <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-        {label}
-      </span>
-      <div className="h-px flex-1 bg-border" />
-    </div>
-  )
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface ActivityFeedProps {
@@ -172,6 +93,7 @@ interface ActivityFeedProps {
 
 export function ActivityFeed({ events, isLoading }: ActivityFeedProps) {
   const [showAll, setShowAll] = useState(false)
+  const navigate = useNavigate()
   const watchlistsQuery = useWatchlists()
 
   // Build name → id map for navigation chips
@@ -249,10 +171,10 @@ export function ActivityFeed({ events, isLoading }: ActivityFeedProps) {
           <div>
             {rows.map((row, i) =>
               row.type === 'separator' ? (
-                <DateDivider key={`sep-${i}`} label={row.label} />
+                <EventDateDivider key={`sep-${i}`} label={row.label} />
               ) : (
                 <div key={row.event.id} className="border-b last:border-b-0">
-                  <EventRow event={row.event} watchlistIdByName={watchlistIdByName} />
+                  <EventRow event={row.event} watchlistIdByName={watchlistIdByName} navigate={navigate} />
                 </div>
               ),
             )}

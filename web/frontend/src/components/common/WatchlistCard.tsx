@@ -19,11 +19,9 @@ export function WatchlistCard({ watchlist, latestResult }: WatchlistCardProps) {
   const showLastRunStatus = isEnabled && latestResult != null
 
   return (
-    <Link
-      to={`/watchlists/${watchlist.id}`}
-      className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl"
-    >
-      <Card className={`transition-colors hover:border-border/80 hover:bg-accent/30 ${!isEnabled ? 'opacity-60' : ''}`}>
+    // Outer div is the positioning context for the stretched Link and the group for hover
+    <div className={`relative group${!isEnabled ? ' opacity-60' : ''}`}>
+      <Card className="transition-colors group-hover:border-border/80 group-hover:bg-accent/30">
         <CardContent className="p-4">
           <div className="space-y-3">
             {/* Header row */}
@@ -45,13 +43,12 @@ export function WatchlistCard({ watchlist, latestResult }: WatchlistCardProps) {
               </div>
               <div className="flex flex-shrink-0 items-center gap-2">
                 {showLastRunStatus && <StatusBadge status={latestResult!.status} />}
-                {/* Stop propagation so the Link doesn't trigger when clicking AMC */}
+                {/* z-10 keeps this link above the stretched card Link below */}
                 <a
                   href={watchlist.showtime_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-muted-foreground/50 transition-colors hover:text-muted-foreground"
+                  className="relative z-10 text-muted-foreground/50 transition-colors hover:text-muted-foreground"
                   title="Open showtime on AMC"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
@@ -92,6 +89,14 @@ export function WatchlistCard({ watchlist, latestResult }: WatchlistCardProps) {
           </div>
         </CardContent>
       </Card>
-    </Link>
+
+      {/* Stretched link covers the full card — placed last so it stacks above Card content,
+          but the AMC link above uses z-10 to remain clickable. */}
+      <Link
+        to={`/watchlists/${watchlist.id}`}
+        className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={`View ${watchlist.name}`}
+      />
+    </div>
   )
 }
