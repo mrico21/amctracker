@@ -197,5 +197,5 @@ export interface JobStatus {
   completed_watchlists: number
   total_watchlists: number
   error_message: string | null
-  trigger_type: 'manual' | 'automatic' | 'retry' | 'startup'
+  trigger_type: 'manual' | 'automatic'
 }
