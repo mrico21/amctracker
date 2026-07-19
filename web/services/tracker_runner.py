@@ -348,6 +348,34 @@ class TrackerRunner:
                 run_id=run_id,
             )
 
+        elif evt_type == "watchlist_expiry_warning":
+            name = payload.get("watchlist", "")
+            hours = payload.get("grace_period_hours", 24)
+            self._activity.make_and_append(
+                event_type="watchlist_expiry_warning",
+                message=f"Expiry warning - {name}: URL expired, will auto-disable in {hours:.0f}h if unresolved",
+                payload=payload,
+                run_id=run_id,
+            )
+
+        elif evt_type == "watchlist_expired":
+            name = payload.get("watchlist", "")
+            self._activity.make_and_append(
+                event_type="watchlist_expired",
+                message=f"Auto-disabled - {name}: URL remained expired past grace period",
+                payload=payload,
+                run_id=run_id,
+            )
+
+        elif evt_type == "watchlist_expiry_recovered":
+            name = payload.get("watchlist", "")
+            self._activity.make_and_append(
+                event_type="watchlist_expiry_recovered",
+                message=f"Expiry recovered - {name}: URL is responding normally again",
+                payload=payload,
+                run_id=run_id,
+            )
+
         elif evt_type == "notification_sent":
             name = payload.get("watchlist", "")
             seats: list[str] = payload.get("seats", [])
