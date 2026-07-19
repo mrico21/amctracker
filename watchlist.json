@@ -143,55 +143,5 @@
       ],
       "id": "3fe32298-4a62-46ce-a282-7a4e5677acf0"
     },
-    {
-      "name": "The Odyssey - Sat Jul 18 3pm",
-      "showtime_url": "https://www.amctheatres.com/showtimes/143822614/seats",
-      "enabled": true,
-      "watch_adjacent": [
-        {
-          "rows": [
-            "J",
-            "K",
-            "L",
-            "M",
-            "N"
-          ],
-          "count": 2
-        }
-      ],
-      "id": "c7ddd330-c265-48a1-858d-9817ced8b57e"
-    },
-    {
-      "name": "The Odyssey - Sat Jul 18 10pm - Burbank",
-      "showtime_url": "https://www.amctheatres.com/showtimes/143798833/seats",
-      "enabled": true,
-      "watch_adjacent": [
-        {
-          "rows": ["G", "H", "I", "J", "K", "L", "M", "N"],
-          "count": 2
-        }
-      ],
-      "id": "bb00b97c-128a-475c-838c-e5ac37b2435a"
-    },
-    {
-      "name": "The Odyssey - Sat 8:50pm - Burbank",
-      "showtime_url": "https://www.amctheatres.com/showtimes/143820338/seats",
-      "enabled": true,
-      "watch_adjacent": [
-        {
-          "rows": [
-            "F",
-            "G",
-            "H",
-            "I",
-            "J",
-            "K",
-            "L"
-          ],
-          "count": 2
-        }
-      ],
-      "id": "193b2bf9-9947-4fbd-8b7b-dc0a7671abbb"
-    }
   ]
 }
