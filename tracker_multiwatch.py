@@ -783,67 +783,52 @@ def _get_pushover_credentials() -> tuple[str, str]:
     return user_key, api_token
 
 
-def send_notification(showtime_url: str, seat_name: str, old: str, new: str, wl_name: str) -> bool:
+def _send_pushover(title: str, message: str) -> bool:
+    """Post one message to Pushover. Returns True if credentials exist and the
+    request was dispatched (delivery is not confirmed — see Phase 1 for retry
+    and NotificationResult). Returns False if credentials are not configured."""
     user_key, api_token = _get_pushover_credentials()
     if not user_key or not api_token:
         return False
     try:
         requests.post(
             "https://api.pushover.net/1/messages.json",
-            data={
-                "token": api_token,
-                "user": user_key,
-                "title": f"AMC Seat Alert — {wl_name}",
-                "message": f"{seat_name}: {old} -> {new}\n{showtime_url}",
-            },
+            data={"token": api_token, "user": user_key, "title": title, "message": message},
             timeout=10,
         )
-        logging.info("notification sent  %s  %s  %s -> %s", wl_name, seat_name, old, new)
     except requests.RequestException:
         pass
     return True
+
+
+def send_notification(showtime_url: str, seat_name: str, old: str, new: str, wl_name: str) -> bool:
+    sent = _send_pushover(
+        title=f"AMC Seat Alert — {wl_name}",
+        message=f"{seat_name}: {old} -> {new}\n{showtime_url}",
+    )
+    if sent:
+        logging.info("notification sent  %s  %s  %s -> %s", wl_name, seat_name, old, new)
+    return sent
 
 
 def send_any_notification(showtime_url: str, wl_name: str, newly_available: list[str]) -> bool:
-    user_key, api_token = _get_pushover_credentials()
-    if not user_key or not api_token:
-        return False
-    try:
-        requests.post(
-            "https://api.pushover.net/1/messages.json",
-            data={
-                "token": api_token,
-                "user": user_key,
-                "title": f"AMC Seat Alert — {wl_name}",
-                "message": "Available seats:\n" + "\n".join(newly_available) + f"\n{showtime_url}",
-            },
-            timeout=10,
-        )
+    sent = _send_pushover(
+        title=f"AMC Seat Alert — {wl_name}",
+        message="Available seats:\n" + "\n".join(newly_available) + f"\n{showtime_url}",
+    )
+    if sent:
         logging.info("any-notification sent  %s  %s", wl_name, ", ".join(newly_available))
-    except requests.RequestException:
-        pass
-    return True
+    return sent
 
 
 def send_adjacent_notification(showtime_url: str, wl_name: str, windows: list[str], count: int) -> bool:
-    user_key, api_token = _get_pushover_credentials()
-    if not user_key or not api_token:
-        return False
-    try:
-        requests.post(
-            "https://api.pushover.net/1/messages.json",
-            data={
-                "token": api_token,
-                "user": user_key,
-                "title": f"AMC Seat Alert — {wl_name}",
-                "message": "Adjacent seats available:\n\n" + "\n".join(windows) + f"\n{showtime_url}",
-            },
-            timeout=10,
-        )
+    sent = _send_pushover(
+        title=f"AMC Seat Alert — {wl_name}",
+        message="Adjacent seats available:\n\n" + "\n".join(windows) + f"\n{showtime_url}",
+    )
+    if sent:
         logging.info("adjacent-notification sent  %s  count=%d  %s", wl_name, count, ", ".join(windows))
-    except requests.RequestException:
-        pass
-    return True
+    return sent
 
 
 def _slug(name: str) -> str:
