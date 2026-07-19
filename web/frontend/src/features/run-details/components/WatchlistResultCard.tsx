@@ -1,79 +1,22 @@
-import { Bell, ExternalLink } from 'lucide-react'
-import type { WatchlistAdjacentConfig, WatchlistRunMonitoring, WatchlistRunResult } from '@/api/types'
+import { ExternalLink } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import type { ActivityEvent, WatchlistRunResult } from '@/api/types'
+import { MonitoringConfig } from '@/components/common/MonitoringConfig'
+import { NotificationDetail } from '@/components/common/NotificationDetail'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { StatusIcon } from '@/components/common/StatusIcon'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { deriveNotificationSummary } from '@/lib/activity'
 import { cn } from '@/lib/utils'
 
-// ── Monitoring config display ─────────────────────────────────────────────────
+// ── Availability summary ──────────────────────────────────────────────────────
 
-function SeatBadge({ label }: { label: string }) {
-  return (
-    <Badge variant="secondary" className="font-mono text-xs">
-      {label}
-    </Badge>
-  )
-}
-
-function AdjacentRow({ cfg }: { cfg: WatchlistAdjacentConfig }) {
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      <span className="text-xs text-muted-foreground">
-        Adjacent {cfg.count} in:
-      </span>
-      {cfg.rows.map((row) => (
-        <SeatBadge key={row} label={`Row ${row}`} />
-      ))}
-    </div>
-  )
-}
-
-function MonitoringConfig({ monitoring }: { monitoring: WatchlistRunMonitoring }) {
-  const hasSeats = monitoring.watch_seats.length > 0
-  const hasAny = monitoring.watch_any.length > 0
-  const hasAdjacent = monitoring.watch_adjacent.length > 0
-
-  if (!hasSeats && !hasAny && !hasAdjacent) return null
-
-  return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Monitoring
-      </p>
-      <div className="space-y-1.5">
-        {hasSeats && (
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="text-xs text-muted-foreground">Specific seats:</span>
-            {monitoring.watch_seats.map((seat) => (
-              <SeatBadge key={seat} label={seat} />
-            ))}
-          </div>
-        )}
-        {hasAny && (
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="text-xs text-muted-foreground">Any seat in:</span>
-            {monitoring.watch_any.map((row) => (
-              <SeatBadge key={row} label={`Row ${row}`} />
-            ))}
-          </div>
-        )}
-        {hasAdjacent &&
-          monitoring.watch_adjacent.map((cfg, i) => (
-            <AdjacentRow key={i} cfg={cfg} />
-          ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Seat availability display ─────────────────────────────────────────────────
-
-function SeatAvailability({ result }: { result: WatchlistRunResult }) {
+function AvailabilityRow({ result }: { result: WatchlistRunResult }) {
   const hasSeats = result.seats_available > 0
   const hasAdjacent = result.adjacent_windows_available > 0
 
-  if (!hasSeats && !hasAdjacent && !result.notification_sent) return null
+  if (!hasSeats && !hasAdjacent) return null
 
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -88,12 +31,6 @@ function SeatAvailability({ result }: { result: WatchlistRunResult }) {
           {result.adjacent_windows_available !== 1 ? 's' : ''}
         </span>
       )}
-      {result.notification_sent && (
-        <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
-          <Bell className="h-3 w-3" />
-          Notified
-        </span>
-      )}
     </div>
   )
 }
@@ -102,25 +39,47 @@ function SeatAvailability({ result }: { result: WatchlistRunResult }) {
 
 interface WatchlistResultCardProps {
   result: WatchlistRunResult
+  /** Activity events belonging to this watchlist in this run */
+  events?: ActivityEvent[]
+  /** UUID for linking the watchlist name to its detail page */
+  watchlistId?: string
 }
 
-export function WatchlistResultCard({ result }: WatchlistResultCardProps) {
+export function WatchlistResultCard({
+  result,
+  events = [],
+  watchlistId,
+}: WatchlistResultCardProps) {
   const isDisabled = !result.enabled
   const isFailed = result.status === 'failed'
+
+  // Derive notification summaries from structured events first, then fall back
+  // to the boolean flag from the run result for older history files
+  const notifEvents = events.filter((e) => e.event_type === 'notification_sent')
+  const notifSummaries = notifEvents.map(deriveNotificationSummary)
+  const showFallbackNotif = notifSummaries.length === 0 && result.notification_sent
 
   return (
     <Card className={cn(isDisabled && 'opacity-60')}>
       <CardContent className="p-4">
         <div className="space-y-3">
-          {/* Header row: icon · name · [Disabled badge] · status · external link */}
+          {/* Header row */}
           <div className="flex items-start gap-2.5">
-            <StatusIcon
-              status={result.status}
-              className="mt-0.5 flex-shrink-0"
-            />
+            <StatusIcon status={result.status} className="mt-0.5 flex-shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-foreground">{result.name}</span>
+                {/* Name links to watchlist detail when id is available */}
+                {watchlistId ? (
+                  <Link
+                    to={`/watchlists/${watchlistId}`}
+                    className="font-medium text-foreground hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {result.name}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-foreground">{result.name}</span>
+                )}
                 {isDisabled && (
                   <Badge variant="outline" className="text-xs">
                     Disabled
@@ -142,14 +101,40 @@ export function WatchlistResultCard({ result }: WatchlistResultCardProps) {
             </div>
           </div>
 
-          {/* Body: only for active (non-disabled) watchlists */}
+          {/* Body — only for non-disabled watchlists */}
           {!isDisabled && (
             <div className="ml-6 space-y-3">
-              {/* Seat availability + notification */}
-              <SeatAvailability result={result} />
+              {/* Seat availability count */}
+              <AvailabilityRow result={result} />
+
+              {/* Notification detail from events (structured) */}
+              {notifSummaries.length > 0 && (
+                <NotificationDetail summaries={notifSummaries} />
+              )}
+
+              {/* Fallback: boolean flag from older run results without event data */}
+              {showFallbackNotif && (
+                <NotificationDetail
+                  summaries={[
+                    {
+                      notificationType: null,
+                      seats: [],
+                      change: null,
+                      windowSize: null,
+                      timestamp: '',
+                      message: 'Notification sent (details not available for this run)',
+                    },
+                  ]}
+                />
+              )}
 
               {/* Monitoring configuration */}
-              <MonitoringConfig monitoring={result.monitoring} />
+              <MonitoringConfig
+                watch_seats={result.monitoring.watch_seats}
+                watch_any={result.monitoring.watch_any}
+                watch_adjacent={result.monitoring.watch_adjacent}
+                showLabel
+              />
 
               {/* Failure detail */}
               {isFailed && result.error_message && (

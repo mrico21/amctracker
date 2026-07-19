@@ -3,6 +3,7 @@ export const queryKeys = {
   info: () => ['info'] as const,
   settings: () => ['settings'] as const,
   watchlists: () => ['watchlists'] as const,
+  watchlist: (id: string) => ['watchlists', id] as const,
   latestRun: () => ['run', 'latest'] as const,
   jobStatus: () => ['run', 'status'] as const,
   schedulerStatus: () => ['scheduler', 'status'] as const,

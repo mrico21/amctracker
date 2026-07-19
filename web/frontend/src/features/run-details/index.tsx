@@ -1,4 +1,5 @@
 import { ChevronLeft } from 'lucide-react'
+import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppHeader } from '@/components/common/AppHeader'
 import { CopyButton } from '@/components/common/CopyButton'
@@ -11,6 +12,8 @@ import { SectionHeader } from '@/components/common/SectionHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { formatDuration, truncateUuid } from '@/lib/format'
 import { useHistoryRun } from '@/hooks/useHistory'
+import { useRunEvents } from '@/hooks/useRunEvents'
+import { useWatchlists } from '@/hooks/useWatchlists'
 import { FailureBreakdownCard } from './components/FailureBreakdownCard'
 import { RunSummaryStats } from './components/RunSummaryStats'
 import { WatchlistResultCard } from './components/WatchlistResultCard'
@@ -18,20 +21,36 @@ import { WatchlistResultCard } from './components/WatchlistResultCard'
 export default function RunDetails() {
   const { runId } = useParams<{ runId: string }>()
   const navigate = useNavigate()
+
   const runQuery = useHistoryRun(runId ?? '')
+  const { byWatchlist } = useRunEvents(runQuery.data?.run_id)
+  const watchlistsQuery = useWatchlists()
+
+  // Build name → id map so watchlist names can link to the detail page
+  const watchlistIdByName = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const w of watchlistsQuery.data ?? []) {
+      map.set(w.name, w.id)
+    }
+    return map
+  }, [watchlistsQuery.data])
 
   const goBack = () => void navigate('/history')
+
+  const backButton = (
+    <button
+      onClick={goBack}
+      className="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ChevronLeft className="h-4 w-4" />
+      History
+    </button>
+  )
 
   if (runQuery.isError) {
     return (
       <PageContainer>
-        <button
-          onClick={goBack}
-          className="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          History
-        </button>
+        {backButton}
         <AppHeader title="Run Details" />
         <ErrorState
           title="Could not load run"
@@ -45,13 +64,7 @@ export default function RunDetails() {
   if (runQuery.isLoading) {
     return (
       <PageContainer>
-        <button
-          onClick={goBack}
-          className="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          History
-        </button>
+        {backButton}
         <AppHeader title="Run Details" />
         <LoadingState message="Loading run details…" />
       </PageContainer>
@@ -71,23 +84,16 @@ export default function RunDetails() {
 
   return (
     <PageContainer>
-      {/* Back navigation */}
-      <button
-        onClick={goBack}
-        className="flex items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        History
-      </button>
+      {backButton}
 
-      {/* Page header group — tightly spaced */}
+      {/* Page header */}
       <div className="space-y-4">
         <AppHeader
           title="Run Details"
           description={`${run.tracker_version} · ${run.hostname}`}
         />
 
-        {/* Identity strip: status + run ID + duration */}
+        {/* Identity strip */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <StatusBadge status={run.run_status} />
           <div
@@ -119,18 +125,12 @@ export default function RunDetails() {
         </div>
       </div>
 
-      {/* Status overview */}
       <RunSummaryStats summary={run.summary} />
-
-      {/* Failure breakdown — only rendered when failures exist */}
       <FailureBreakdownCard breakdown={run.failure_breakdown} />
 
-      {/* Watchlist results */}
+      {/* Per-watchlist results */}
       <div className="space-y-3">
-        <SectionHeader
-          title="Watchlists"
-          description={watchlistSummary}
-        />
+        <SectionHeader title="Watchlists" description={watchlistSummary} />
         {run.watchlists.length === 0 ? (
           <EmptyState
             title="No watchlist results"
@@ -139,7 +139,12 @@ export default function RunDetails() {
         ) : (
           <div className="space-y-2">
             {run.watchlists.map((result) => (
-              <WatchlistResultCard key={result.name} result={result} />
+              <WatchlistResultCard
+                key={result.name}
+                result={result}
+                events={byWatchlist.get(result.name) ?? []}
+                watchlistId={watchlistIdByName.get(result.name)}
+              />
             ))}
           </div>
         )}

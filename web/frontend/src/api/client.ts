@@ -58,6 +58,7 @@ export const apiClient = {
   settings: () => get<SettingsResponse>('/settings'),
   updateSettings: (body: Partial<SettingsResponse>) => put<SettingsResponse>('/settings', body),
   watchlists: () => get<WatchlistEntry[]>('/watchlists'),
+  watchlist: (id: string) => get<WatchlistEntry>(`/watchlists/${id}`),
   history: () => get<HistoryResponse>('/history'),
   historyRun: (runId: string) => get<RunResult>(`/history/${runId}`),
   latestRun: () => get<RunResult>('/run/latest'),

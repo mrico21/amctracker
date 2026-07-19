@@ -4,6 +4,7 @@ import Dashboard from '@/pages/Dashboard'
 import History from '@/pages/History'
 import RunDetails from '@/pages/RunDetails'
 import Settings from '@/pages/Settings'
+import WatchlistDetail from '@/pages/WatchlistDetail'
 import Watchlists from '@/pages/Watchlists'
 
 const router = createBrowserRouter([
@@ -15,6 +16,7 @@ const router = createBrowserRouter([
       { path: 'history', element: <History /> },
       { path: 'history/:runId', element: <RunDetails /> },
       { path: 'watchlists', element: <Watchlists /> },
+      { path: 'watchlists/:id', element: <WatchlistDetail /> },
       { path: 'settings', element: <Settings /> },
     ],
   },
