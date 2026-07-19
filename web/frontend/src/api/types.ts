@@ -132,6 +132,7 @@ export interface SettingsResponse {
 
 // ── Activity feed ─────────────────────────────────────────────────────────────
 
+// Must stay in sync with ActivityEventType in web/models/activity.py.
 export type ActivityEventType =
   | 'run_start'
   | 'watchlist_start'
@@ -139,6 +140,7 @@ export type ActivityEventType =
   | 'watchlist_blocked'
   | 'watchlist_failed'
   | 'notification_sent'
+  | 'notification_failed'
   | 'run_complete'
   | 'run_cancelled'
   | 'scheduler_triggered'

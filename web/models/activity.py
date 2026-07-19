@@ -1,4 +1,22 @@
+from typing import Literal
+
 from pydantic import BaseModel
+
+# Canonical set of event types emitted by the tracker and scheduler.
+# Must stay in sync with ActivityEventType in web/frontend/src/api/types.ts.
+ActivityEventType = Literal[
+    "run_start",
+    "watchlist_start",
+    "watchlist_complete",
+    "watchlist_blocked",
+    "watchlist_failed",
+    "notification_sent",
+    "notification_failed",
+    "run_complete",
+    "run_cancelled",
+    "scheduler_triggered",
+    "scheduler_skipped",
+]
 
 
 class ActivityEvent(BaseModel):
