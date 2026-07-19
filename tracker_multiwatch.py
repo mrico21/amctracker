@@ -30,6 +30,7 @@ RESERVABLE_TYPES = {"CanReserve", "LoveSeatLeft", "LoveSeatRight"}
 _SMALL_PAGE_THRESHOLD = 200_000  # chars; real AMC pages are ~944KB+; Cloudflare block pages are ~7KB
 _BACKOFF_BASE_SECONDS = 10.0    # first retry delay; doubles on each subsequent attempt
 _BACKOFF_MAX_ATTEMPTS = 3       # 1 initial fetch + 2 retries
+_EXPIRY_GRACE_PERIOD_HOURS: float = 24.0  # change this one constant to tune the grace period
 TRACKER_VERSION = "1.0.5"
 
 _RUN_START: float = 0.0
@@ -793,6 +794,108 @@ def save_state(state: dict) -> None:
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
     tmp.replace(STATE_FILE)
+
+
+def _disable_watchlist_in_file(wl_id: str, wl_name: str) -> None:
+    """Atomically write watchlist.json with the matching entry's enabled flag set to false."""
+    try:
+        data = json.loads(WATCHLIST.read_text(encoding="utf-8"))
+        matched = False
+        for entry in data.get("watchlists", []):
+            if entry.get("id") == wl_id:
+                entry["enabled"] = False
+                matched = True
+                break
+        if not matched:
+            logging.error("[%s] auto-disable: no watchlist with id=%s found in watchlist.json", wl_name, wl_id)
+            return
+        tmp = WATCHLIST.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        tmp.replace(WATCHLIST)
+        logging.info("[%s] auto-disable: watchlist.json updated (enabled=false)", wl_name)
+    except Exception as exc:
+        logging.error("[%s] auto-disable: failed to write watchlist.json: %s", wl_name, exc)
+
+
+def _handle_expired_url(wl_name: str, wl_id: str, prev_state: dict, state: dict) -> bool:
+    """Run the expiry grace-period state machine for a watchlist that returned EXPIRED_URL.
+
+    Reads _meta from prev_state, advances the state machine, and writes the
+    updated entry back to state[wl_name] (seat data preserved, _meta updated).
+
+    Returns True if the watchlist was auto-disabled this call.
+    """
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    meta = prev_state.get("_meta", {})
+    seat_state = {k: v for k, v in prev_state.items() if k != "_meta"}
+
+    first_seen: str | None = meta.get("expired_url_first_seen")
+    confirmed: bool = meta.get("expired_url_confirmed", False)
+
+    if first_seen is None:
+        # First EXPIRED_URL observation — start the grace period and warn.
+        new_meta = {
+            "expired_url_first_seen": now_iso,
+            "expired_url_confirmed": False,
+            "auto_disabled_at": None,
+        }
+        state[wl_name] = {**seat_state, "_meta": new_meta}
+
+        _emit_event("watchlist_expiry_warning", watchlist=wl_name,
+                    first_seen=now_iso,
+                    grace_period_hours=_EXPIRY_GRACE_PERIOD_HOURS)
+        logging.warning(
+            "[%s] EXPIRY WARNING: first EXPIRED_URL; %.0fh grace period started",
+            wl_name, _EXPIRY_GRACE_PERIOD_HOURS,
+        )
+
+        result = _send_pushover(
+            title="AMC Tracker — Expiry Warning",
+            message=(
+                f'"{wl_name}" returned an expired URL.\n'
+                f'It will be auto-disabled if the URL continues to fail for '
+                f'{_EXPIRY_GRACE_PERIOD_HOURS:.0f} hours.'
+            ),
+        )
+        if not result.delivered:
+            logging.warning("[%s] expiry warning notification failed: %s", wl_name, result.error)
+        return False
+
+    elapsed_hours = (now_dt - datetime.fromisoformat(first_seen)).total_seconds() / 3600.0
+
+    if elapsed_hours < _EXPIRY_GRACE_PERIOD_HOURS:
+        # Still within the grace period — preserve state silently.
+        state[wl_name] = {**seat_state, "_meta": meta}
+        logging.info(
+            "[%s] EXPIRED_URL: grace period active (%.1fh / %.0fh elapsed)",
+            wl_name, elapsed_hours, _EXPIRY_GRACE_PERIOD_HOURS,
+        )
+        return False
+
+    if not confirmed:
+        # Grace period has elapsed — record first confirmation, await one more.
+        state[wl_name] = {**seat_state, "_meta": {**meta, "expired_url_confirmed": True}}
+        logging.warning(
+            "[%s] EXPIRY CONFIRMED: grace period elapsed (%.1fh); awaiting final confirmation run",
+            wl_name, elapsed_hours,
+        )
+        return False
+
+    # Grace period elapsed and already confirmed — auto-disable.
+    auto_disabled_at = now_iso
+    state[wl_name] = {**seat_state, "_meta": {**meta, "auto_disabled_at": auto_disabled_at}}
+    _disable_watchlist_in_file(wl_id, wl_name)
+
+    _emit_event("watchlist_expired", watchlist=wl_name,
+                first_seen=first_seen,
+                grace_period_hours=_EXPIRY_GRACE_PERIOD_HOURS,
+                auto_disabled_at=auto_disabled_at)
+    logging.warning(
+        "[%s] AUTO-DISABLED: EXPIRED_URL persisted past grace period + confirmation",
+        wl_name,
+    )
+    return True
 
 
 def _get_pushover_credentials() -> tuple[str, str]:
@@ -1918,7 +2021,16 @@ def main():
                 prev_state = state.get(wl_name, {})
                 current, wl_result, notif_count = _process_watchlist_body(wl, html, prev_state, args)
                 _ts(f"WATCHLIST DONE: {wl_name} — elapsed {time.monotonic() - wl_start:.2f}s")
-                state[wl_name] = current
+
+                # Recovery: if expiry was being tracked and this run succeeded, clear it.
+                prev_meta = prev_state.get("_meta", {})
+                if prev_meta.get("expired_url_first_seen"):
+                    _emit_event("watchlist_expiry_recovered", watchlist=wl_name,
+                                first_seen=prev_meta["expired_url_first_seen"],
+                                grace_period_hours=_EXPIRY_GRACE_PERIOD_HOURS)
+                    logging.info("[%s] EXPIRY RECOVERED: URL is responding normally again", wl_name)
+
+                state[wl_name] = current  # _meta dropped naturally; current contains only seat data
                 notifications_sent += notif_count
                 wl_results.append(wl_result)
                 processed += 1
@@ -1944,6 +2056,7 @@ def main():
                     msg = f"full page received ({len(html):,} chars) but seatingLayout is absent -- showtime may be expired or URL is invalid"
                     logging.warning("[%s] %s: %s", wl_name, failure_type, msg)
                     failed_expired += 1
+                    _handle_expired_url(wl_name, wl.get("id", ""), prev_state, state)
                     _emit_event("watchlist_failed", watchlist=wl_name, failure_type=failure_type, message=msg)
                 elif failure_type == "PARSE_ERROR":
                     msg = f"seatingLayout found but could not be parsed -- possible AMC page structure change; {exc}"
