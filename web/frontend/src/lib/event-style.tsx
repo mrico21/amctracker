@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Bell,
+  BellOff,
   Calendar,
   CalendarClock,
   CheckCircle,
@@ -31,6 +32,8 @@ export function getEventStyle(type: ActivityEventType): EventStyle {
       return { icon: <XCircle className="h-3.5 w-3.5" />, color: 'text-red-500 dark:text-red-400', muted: false }
     case 'notification_sent':
       return { icon: <Bell className="h-3.5 w-3.5" />, color: 'text-emerald-600 dark:text-emerald-400', muted: false }
+    case 'notification_failed':
+      return { icon: <BellOff className="h-3.5 w-3.5" />, color: 'text-red-600 dark:text-red-400', muted: false }
     case 'scheduler_triggered':
       return { icon: <Calendar className="h-3.5 w-3.5" />, color: 'text-blue-500 dark:text-blue-400', muted: false }
     case 'scheduler_skipped':
