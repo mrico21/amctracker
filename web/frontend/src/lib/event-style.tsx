@@ -3,9 +3,12 @@ import {
   Bell,
   BellOff,
   Calendar,
+  CalendarCheck,
   CalendarClock,
+  CalendarX,
   CheckCircle,
   CircleDashed,
+  Clock,
   Play,
   SkipForward,
   XCircle,
@@ -30,6 +33,12 @@ export function getEventStyle(type: ActivityEventType): EventStyle {
       return { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-600 dark:text-amber-400', muted: false }
     case 'watchlist_failed':
       return { icon: <XCircle className="h-3.5 w-3.5" />, color: 'text-red-500 dark:text-red-400', muted: false }
+    case 'watchlist_expiry_warning':
+      return { icon: <Clock className="h-3.5 w-3.5" />, color: 'text-amber-600 dark:text-amber-400', muted: false }
+    case 'watchlist_expired':
+      return { icon: <CalendarX className="h-3.5 w-3.5" />, color: 'text-red-600 dark:text-red-400', muted: false }
+    case 'watchlist_expiry_recovered':
+      return { icon: <CalendarCheck className="h-3.5 w-3.5" />, color: 'text-emerald-600 dark:text-emerald-400', muted: false }
     case 'notification_sent':
       return { icon: <Bell className="h-3.5 w-3.5" />, color: 'text-emerald-600 dark:text-emerald-400', muted: false }
     case 'notification_failed':
