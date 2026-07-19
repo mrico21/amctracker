@@ -600,12 +600,16 @@ def _process_watchlist_body(
                     wl_notif_sent = True
                     _emit_event("notification_sent", watchlist=wl_name,
                                 notification_type="watch_seats", seats=[seat_name],
-                                change=f"{old} -> {new}")
+                                change=f"{old} -> {new}",
+                                attempts=result.attempts,
+                                final_status_code=result.final_status_code,
+                                latency_seconds=result.latency_seconds)
                 elif result.attempts > 0:
                     _emit_event("notification_failed", watchlist=wl_name,
                                 notification_type="watch_seats", seats=[seat_name],
                                 error=result.error, attempts=result.attempts,
-                                final_status_code=result.final_status_code)
+                                final_status_code=result.final_status_code,
+                                latency_seconds=result.latency_seconds)
 
     if watch_any_seats:
         newly_available = []
@@ -641,12 +645,16 @@ def _process_watchlist_body(
                 notifications += 1
                 wl_notif_sent = True
                 _emit_event("notification_sent", watchlist=wl_name,
-                            notification_type="watch_any", seats=newly_available)
+                            notification_type="watch_any", seats=newly_available,
+                            attempts=result.attempts,
+                            final_status_code=result.final_status_code,
+                            latency_seconds=result.latency_seconds)
             elif result.attempts > 0:
                 _emit_event("notification_failed", watchlist=wl_name,
                             notification_type="watch_any", seats=newly_available,
                             error=result.error, attempts=result.attempts,
-                            final_status_code=result.final_status_code)
+                            final_status_code=result.final_status_code,
+                            latency_seconds=result.latency_seconds)
 
     for adj_config in watch_adjacent_configs:
         rows = adj_config.get("rows", [])
@@ -706,12 +714,16 @@ def _process_watchlist_body(
                 wl_notif_sent = True
                 _emit_event("notification_sent", watchlist=wl_name,
                             notification_type="watch_adjacent", seats=config_newly_available,
-                            window_size=count)
+                            window_size=count,
+                            attempts=result.attempts,
+                            final_status_code=result.final_status_code,
+                            latency_seconds=result.latency_seconds)
             elif result.attempts > 0:
                 _emit_event("notification_failed", watchlist=wl_name,
                             notification_type="watch_adjacent", seats=config_newly_available,
                             error=result.error, attempts=result.attempts,
-                            final_status_code=result.final_status_code)
+                            final_status_code=result.final_status_code,
+                            latency_seconds=result.latency_seconds)
 
     _ts("NOTIFY DONE")
     seats_avail = sum(1 for k, v in current.items() if not k.startswith("adj:") and v == "AVAILABLE")
@@ -807,6 +819,7 @@ class NotificationResult:
     attempts: int
     final_status_code: int | None
     error: str | None
+    latency_seconds: float = 0.0  # wall-clock time from first attempt to final result
 
 
 _PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
@@ -835,10 +848,12 @@ def _send_pushover(title: str, message: str) -> NotificationResult:
             attempts=0,
             final_status_code=None,
             error="Pushover credentials not configured",
+            latency_seconds=0.0,
         )
 
     last_status: int | None = None
     last_error: str | None = None
+    t0 = time.monotonic()
 
     for attempt in range(1, _NOTIF_MAX_ATTEMPTS + 1):
         try:
@@ -855,6 +870,7 @@ def _send_pushover(title: str, message: str) -> NotificationResult:
                     attempts=attempt,
                     final_status_code=200,
                     error=None,
+                    latency_seconds=round(time.monotonic() - t0, 3),
                 )
 
             # Hard failure — 4xx errors other than 429 will not improve on retry.
@@ -898,6 +914,7 @@ def _send_pushover(title: str, message: str) -> NotificationResult:
         attempts=_NOTIF_MAX_ATTEMPTS,
         final_status_code=last_status,
         error=last_error,
+        latency_seconds=round(time.monotonic() - t0, 3),
     )
 
 
