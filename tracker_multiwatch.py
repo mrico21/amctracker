@@ -594,12 +594,18 @@ def _process_watchlist_body(
             for seat_name, old, new in changes:
                 print(f"  {seat_name}: {old} -> {new}")
                 logging.info("CHANGE  [%s]  %s  %s -> %s", wl_name, seat_name, old, new)
-                if send_notification(url, seat_name, old, new, wl_name):
+                result = send_notification(url, seat_name, old, new, wl_name)
+                if result.delivered:
                     notifications += 1
                     wl_notif_sent = True
                     _emit_event("notification_sent", watchlist=wl_name,
                                 notification_type="watch_seats", seats=[seat_name],
                                 change=f"{old} -> {new}")
+                elif result.attempts > 0:
+                    _emit_event("notification_failed", watchlist=wl_name,
+                                notification_type="watch_seats", seats=[seat_name],
+                                error=result.error, attempts=result.attempts,
+                                final_status_code=result.final_status_code)
 
     if watch_any_seats:
         newly_available = []
@@ -630,11 +636,17 @@ def _process_watchlist_body(
         if newly_available:
             print(f"NEWLY AVAILABLE: {', '.join(newly_available)}")
             logging.info("ANY-AVAILABLE  [%s]  %s", wl_name, ", ".join(newly_available))
-            if send_any_notification(url, wl_name, newly_available):
+            result = send_any_notification(url, wl_name, newly_available)
+            if result.delivered:
                 notifications += 1
                 wl_notif_sent = True
                 _emit_event("notification_sent", watchlist=wl_name,
                             notification_type="watch_any", seats=newly_available)
+            elif result.attempts > 0:
+                _emit_event("notification_failed", watchlist=wl_name,
+                            notification_type="watch_any", seats=newly_available,
+                            error=result.error, attempts=result.attempts,
+                            final_status_code=result.final_status_code)
 
     for adj_config in watch_adjacent_configs:
         rows = adj_config.get("rows", [])
@@ -688,12 +700,18 @@ def _process_watchlist_body(
         if config_newly_available:
             print(f"NEWLY AVAILABLE (adjacent): {', '.join(config_newly_available)}")
             logging.info("ADJACENT-AVAILABLE  [%s]  count=%d  %s", wl_name, count, ", ".join(config_newly_available))
-            if send_adjacent_notification(url, wl_name, config_newly_available, count):
+            result = send_adjacent_notification(url, wl_name, config_newly_available, count)
+            if result.delivered:
                 notifications += 1
                 wl_notif_sent = True
                 _emit_event("notification_sent", watchlist=wl_name,
                             notification_type="watch_adjacent", seats=config_newly_available,
                             window_size=count)
+            elif result.attempts > 0:
+                _emit_event("notification_failed", watchlist=wl_name,
+                            notification_type="watch_adjacent", seats=config_newly_available,
+                            error=result.error, attempts=result.attempts,
+                            final_status_code=result.final_status_code)
 
     _ts("NOTIFY DONE")
     seats_avail = sum(1 for k, v in current.items() if not k.startswith("adj:") and v == "AVAILABLE")
@@ -1777,8 +1795,15 @@ def main():
             wl_url = first.get("showtime_url", "")
         except Exception:
             pass
-        send_notification(wl_url, "TEST", "UNAVAILABLE", "AVAILABLE", wl_name)
-        print("Test notification sent.")
+        result = send_notification(wl_url, "TEST", "UNAVAILABLE", "AVAILABLE", wl_name)
+        if result.delivered:
+            print("Test notification sent successfully.")
+        elif result.attempts == 0:
+            print("ERROR: Pushover credentials not configured.")
+            sys.exit(1)
+        else:
+            print(f"ERROR: Notification delivery failed after {result.attempts} attempt(s): {result.error}")
+            sys.exit(1)
         return
 
     _ts("STARTUP: loading watchlist.json")
