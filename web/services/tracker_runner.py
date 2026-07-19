@@ -359,6 +359,17 @@ class TrackerRunner:
                 run_id=run_id,
             )
 
+        elif evt_type == "notification_failed":
+            name = payload.get("watchlist", "")
+            error = payload.get("error") or "unknown error"
+            attempts = payload.get("attempts", 1)
+            self._activity.make_and_append(
+                event_type="notification_failed",
+                message=f"Notification failed - {name}: {error} ({attempts} attempt{'s' if attempts != 1 else ''})",
+                payload=payload,
+                run_id=run_id,
+            )
+
         elif evt_type == "run_complete":
             succeeded = payload.get("succeeded", 0)
             failed = payload.get("failed", 0)
