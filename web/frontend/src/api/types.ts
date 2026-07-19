@@ -110,6 +110,8 @@ export interface InfoResponse {
   last_run_id: string | null
   last_run_status: string | null
   last_run_at: string | null
+  commit_hash: string | null
+  server_started_at: string
 }
 
 export interface SettingsResponse {

@@ -1,4 +1,5 @@
 import { Lock, Monitor, Moon, Sun } from 'lucide-react'
+import { formatDateTime } from '@/lib/format'
 import { useState } from 'react'
 import { AppHeader } from '@/components/common/AppHeader'
 import { ErrorState } from '@/components/common/ErrorState'
@@ -421,6 +422,46 @@ export default function Settings() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Build ── */}
+      {(() => {
+        const feHash = __GIT_HASH__
+        const beHash = info?.commit_hash ?? null
+        const inSync = feHash !== 'dev' && beHash !== null && feHash === beHash
+        const mismatch = feHash !== 'dev' && beHash !== null && feHash !== beHash
+        return (
+          <div className="space-y-3">
+            <SectionHeader title="Build" />
+            <Card>
+              <CardContent className="p-4 divide-y">
+                <div className="flex items-center justify-between gap-4 py-3 first:pt-0">
+                  <p className="text-sm text-muted-foreground">Sync status</p>
+                  {inSync && (
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                      In sync
+                    </span>
+                  )}
+                  {mismatch && (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                      Mismatch
+                    </span>
+                  )}
+                  {!inSync && !mismatch && (
+                    <span className="text-sm font-medium text-muted-foreground">—</span>
+                  )}
+                </div>
+                <SettingRow label="Frontend commit" value={feHash} mono />
+                <SettingRow label="Frontend built" value={formatDateTime(__BUILD_TIME__)} />
+                <SettingRow label="Backend commit" value={beHash ?? '—'} mono />
+                <SettingRow
+                  label="Backend started"
+                  value={info?.server_started_at ? formatDateTime(info.server_started_at) : '—'}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        )
+      })()}
 
       {/* ── Future: Notifications ── */}
       <PlaceholderSection

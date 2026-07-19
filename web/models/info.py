@@ -10,3 +10,5 @@ class InfoResponse(BaseModel):
     last_run_id: str | None
     last_run_status: str | None
     last_run_at: str | None
+    commit_hash: str | None
+    server_started_at: str
