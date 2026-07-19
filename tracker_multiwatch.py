@@ -778,8 +778,8 @@ def _get_pushover_credentials() -> tuple[str, str]:
             data = json.loads(settings_path.read_text(encoding="utf-8"))
             user_key = user_key or data.get("pushover_user_key", "")
             api_token = api_token or data.get("pushover_api_token", "")
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning("Could not read Pushover credentials from settings.json: %s", e)
     return user_key, api_token
 
 
@@ -1722,7 +1722,7 @@ def main():
         _ts("STARTUP: watchlist order randomized")
 
     state = load_state()
-    html_cache: dict = {}
+    html_cache: dict[str, str] = {}
     run_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)
     start_time = time.monotonic()
@@ -1796,9 +1796,15 @@ def main():
                     logging.info("[%s] CACHE MISS  %s", wl_name, url)
                     _ts(f"FETCH BEGIN: {url}")
                     html = _fetch_with_backoff(page, url)
-                    html_cache[url] = html
                     cache_misses += 1
                     _ts(f"FETCH DONE: {len(html):,} chars received")
+                    # Only cache full-sized pages. A challenge/block page must
+                    # not be cached: every watchlist sharing this URL deserves
+                    # an independent fetch attempt, not a reused blocked response.
+                    if len(html) >= _SMALL_PAGE_THRESHOLD:
+                        html_cache[url] = html
+                    else:
+                        _ts(f"FETCH: not caching small response ({len(html):,} chars) for {url}")
 
                 prev_state = state.get(wl_name, {})
                 current, wl_result, notif_count = _process_watchlist_body(wl, html, prev_state, args)
